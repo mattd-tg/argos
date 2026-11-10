@@ -5,6 +5,7 @@ import gqlTag from "graphql-tag";
 
 import { getAvatarColor } from "@/account/avatar";
 import { startSession } from "@/auth/login";
+import { assertNativeLoginAllowed } from "@/auth/native-login";
 import {
   checkHasAccessToSAML,
   getTeamSamlPublicValues,
@@ -1274,8 +1275,8 @@ export const resolvers: IResolvers = {
       const { auth } = ctx;
 
       if (!auth) {
+        assertNativeLoginAllowed();
         const { user } = await getOrCreateUserByVerifiedEmail(email);
-
         // Add user to the team and delete the invite in a transaction.
         await transaction(async (trx) => {
           await Promise.all([

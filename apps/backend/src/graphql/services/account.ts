@@ -13,6 +13,7 @@ import {
   TeamInvite,
   TeamScimUser,
   TeamUser,
+  TwingateGatewayIdentity,
   User,
   UserAccessToken,
   UserAccessTokenScope,
@@ -219,6 +220,11 @@ export async function deleteAccount(args: {
           // credential stays in the user's authenticator and stays a valid way
           // to sign in to an account that no longer exists.
           UserPasskey.query(trx).where("userId", userId).delete(),
+
+          // Same reason: a binding left on the deleted user would make every
+          // Gateway request for that subject resolve to it and fail, with no
+          // way to enroll again.
+          TwingateGatewayIdentity.query(trx).where("userId", userId).delete(),
 
           // Remove user from all its build reviews
           BuildReview.query(trx)

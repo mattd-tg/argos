@@ -6,7 +6,12 @@ import config from "@/config";
 export type { S3Client } from "@aws-sdk/client-s3";
 
 function getS3ClientBase(region: string = config.get("s3.region")) {
-  return new S3Client({ region });
+  const endpoint = config.get("s3.endpoint");
+  return new S3Client({
+    region,
+    ...(endpoint ? { endpoint } : {}),
+    forcePathStyle: config.get("s3.forcePathStyle"),
+  });
 }
 
 /**

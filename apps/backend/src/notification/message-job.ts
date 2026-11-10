@@ -1,5 +1,6 @@
 import { invariant } from "@argos/util/invariant";
 
+import config from "@/config";
 import { NotificationMessage } from "@/database/models";
 import { sendEmail } from "@/email/send";
 import { createModelJob } from "@/job-core";
@@ -18,6 +19,10 @@ export const notificationMessageJob = createModelJob(
 async function processMessage(message: NotificationMessage) {
   if (message.channel !== "email") {
     throw new Error("Only email channel is supported");
+  }
+
+  if (!config.get("email.enabled")) {
+    return;
   }
 
   await message.$fetchGraph("[workflow, user.account]");

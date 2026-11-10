@@ -16,6 +16,7 @@ import {
 } from "react-hook-form";
 import { Navigate, useSearchParams } from "react-router";
 
+import { config } from "@/config";
 import { PRO_PLAN_PRICING } from "@/constants";
 import { useAuth } from "@/containers/Auth";
 import { SignupOptions } from "@/containers/SignupOptions";
@@ -360,6 +361,16 @@ export function Component() {
 
   if (auth.status === "authenticated") {
     return <Navigate to="/" replace />;
+  }
+
+  if (config.auth.gatewayManaged) {
+    return (
+      <StandalonePage>
+        <SignupCard title="Sign Up">
+          <p>Access is provided by Twingate.</p>
+        </SignupCard>
+      </StandalonePage>
+    );
   }
 
   return <SignupPage />;

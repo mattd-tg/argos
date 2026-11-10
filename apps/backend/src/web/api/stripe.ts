@@ -2,6 +2,7 @@ import { invariant } from "@argos/util/invariant";
 import * as Sentry from "@sentry/node";
 import express from "express";
 
+import { assertNativeLoginAllowed } from "@/auth/native-login";
 import { sessionAuthFromExpressReq } from "@/auth/session-request";
 import config from "@/config";
 import { getAdminAccount } from "@/graphql/services/account";
@@ -67,6 +68,7 @@ router.use(
   requireCsrf,
   express.json(),
   asyncHandler(async (req, res) => {
+    assertNativeLoginAllowed();
     const auth = await sessionAuthFromExpressReq(req);
     const { user } = auth;
 
@@ -113,6 +115,7 @@ router.use(
   requireCsrf,
   express.json(),
   asyncHandler(async (req, res) => {
+    assertNativeLoginAllowed();
     const auth = await sessionAuthFromExpressReq(req);
 
     try {

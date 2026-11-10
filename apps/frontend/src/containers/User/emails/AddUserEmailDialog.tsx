@@ -3,6 +3,7 @@ import { InfoIcon } from "lucide-react";
 import { useForm, type SubmitHandler } from "react-hook-form";
 import { z } from "zod";
 
+import { config } from "@/config";
 import { logout } from "@/containers/Auth";
 import { graphql } from "@/gql";
 import { Button } from "@/ui/Button";
@@ -50,6 +51,9 @@ export function AddUserEmailDialog() {
   });
   const serverError = form.formState.errors.root?.serverError;
   const client = useApolloClient();
+  function handleSwitchAccount() {
+    logout();
+  }
   const onSubmit: SubmitHandler<Inputs> = async (data) => {
     await client.mutate({
       mutation: AddUserEmailMutation,
@@ -110,9 +114,11 @@ export function AddUserEmailDialog() {
                 existing resources you wish to keep must be transferred before
                 the account deletion.
               </p>
-              <Button className="self-center" onClick={() => logout()}>
-                Switch account
-              </Button>
+              {config.auth.gatewayManaged ? null : (
+                <Button className="self-center" onClick={handleSwitchAccount}>
+                  Switch account
+                </Button>
+              )}
             </Card>
           ) : null}
         </DialogBody>

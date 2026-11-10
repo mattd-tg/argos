@@ -7,12 +7,15 @@ import { UnretryableError } from "@/job-core";
 import logger from "@/logger";
 
 const production = config.get("env") === "production";
+const emailEnabled = config.get("email.enabled");
 const resendApiKey = config.get("resend.apiKey");
 
-// Resend throws if API key is missing
-// It is tolerable in test and development but not in production
+// Resend throws if API key is missing. It is tolerable in test and development
+// but not in production. Disabled deployments must not construct it at import.
 const resend =
-  resendApiKey || production ? new Resend(config.get("resend.apiKey")) : null;
+  emailEnabled && (resendApiKey || production)
+    ? new Resend(config.get("resend.apiKey"))
+    : null;
 
 const defaultFrom = "Argos <contact@argos-ci.com>";
 
@@ -49,6 +52,10 @@ export async function sendEmail(options: {
    */
   idempotencyKey?: string | undefined;
 }) {
+  if (!config.get("email.enabled")) {
+    return null;
+  }
+
   if (production) {
     if (!resend) {
       logger.error("Resend API key is missing");

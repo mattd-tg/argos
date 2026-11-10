@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useLocation } from "react-router";
 
+import { config } from "@/config";
 import { logout, useAuth, type AuthAccount } from "@/containers/Auth";
 import { getAccountURL } from "@/pages/Account/AccountParams";
 import { LinkButton } from "@/ui/Button";
@@ -89,6 +90,10 @@ function UserMenu(props: { account: AuthAccount }) {
   const hotkeysDialog = useBuildHotkeysDialogState();
   const { colorMode, setColorMode } = useColorMode();
 
+  function handleLogout() {
+    logout();
+  }
+
   return (
     <MenuRoot>
       <MenuTrigger>
@@ -155,10 +160,14 @@ function UserMenu(props: { account: AuthAccount }) {
         >
           Status
         </MenuItem>
-        <MenuSeparator />
-        <MenuItem icon={<LogOutIcon />} onAction={() => logout()}>
-          Logout
-        </MenuItem>
+        {config.auth.gatewayManaged ? null : (
+          <>
+            <MenuSeparator />
+            <MenuItem icon={<LogOutIcon />} onAction={handleLogout}>
+              Logout
+            </MenuItem>
+          </>
+        )}
       </Menu>
     </MenuRoot>
   );

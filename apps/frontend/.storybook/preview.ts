@@ -15,6 +15,7 @@ window.clientData ??= {
   config: {
     sentry: { environment: "storybook", clientDsn: "" },
     session: { domain: "" },
+    auth: { gatewayManaged: false },
     samlTeamSlug: "",
     releaseVersion: "storybook",
     contactEmail: "",

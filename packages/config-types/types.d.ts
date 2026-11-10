@@ -10,6 +10,9 @@ export interface ClientConfig {
     domain: string;
   };
   samlTeamSlug: string;
+  auth: {
+    gatewayManaged: boolean;
+  };
   releaseVersion: string;
   contactEmail: string;
   github: {

@@ -12,6 +12,36 @@ import { Link } from "@/ui/Link";
 import { redirectToSAMLLogin } from "@/util/saml";
 
 export function Component() {
+  if (config.auth.gatewayManaged) {
+    return <GatewayLogin />;
+  }
+
+  return <NativeLogin />;
+}
+
+function GatewayLogin() {
+  const auth = useAuth();
+
+  if (auth.status === "authenticated") {
+    return <Navigate to="/" replace />;
+  }
+
+  return (
+    <>
+      <Helmet>
+        <title>Login</title>
+      </Helmet>
+
+      <Container className="mt-12 flex max-w-sm flex-col items-center justify-center px-4">
+        <BrandShield className="mb-6 w-28" />
+        <h1 className="mb-10 text-3xl font-semibold">Login to Argos</h1>
+        <p>Access is provided by Twingate.</p>
+      </Container>
+    </>
+  );
+}
+
+function NativeLogin() {
   const auth = useAuth();
   const [searchParams] = useSearchParams();
   const [email, setEmail] = useState(searchParams.get("email") || "");

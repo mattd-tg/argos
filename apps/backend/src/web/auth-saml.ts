@@ -1,6 +1,7 @@
 import express, { Router } from "express";
 import { z } from "zod";
 
+import { assertNativeLoginAllowed } from "@/auth/native-login";
 import {
   checkHasAccessToSAML,
   checkTeamSamlEnabled,
@@ -77,6 +78,11 @@ async function getEnabledTeamSamlConfig(account: Account) {
 }
 
 const router: Router = Router();
+
+router.use("/auth/saml", (_req, _res, next) => {
+  assertNativeLoginAllowed();
+  next();
+});
 
 router.get(
   "/auth/saml/:teamSlug/login",

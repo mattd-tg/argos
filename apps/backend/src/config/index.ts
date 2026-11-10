@@ -1,6 +1,8 @@
 import convict from "convict";
 import dotenv from "dotenv";
 
+import { isValidPgBigInt } from "@/database/util/biginteger";
+
 import {
   resolveFromPackageRoot,
   resolveFromRepositoryRoot,
@@ -27,7 +29,7 @@ const toStringArray = (value: string | string[]) => {
   }
 
   if (value === "") {
-    return null;
+    return [];
   }
 
   return value.split(",");
@@ -49,6 +51,39 @@ convict.addFormat({
     }
   },
   coerce: toStringArray,
+});
+
+convict.addFormat({
+  name: "http-url",
+  validate: (value) => {
+    if (typeof value !== "string") {
+      throw new Error("must be a string");
+    }
+    if (!value) {
+      return;
+    }
+
+    let url: URL;
+    try {
+      url = new URL(value);
+    } catch {
+      throw new Error("must be an HTTP(S) URL");
+    }
+
+    if (
+      (url.protocol !== "http:" && url.protocol !== "https:") ||
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash ||
+      value.includes("?") ||
+      value.includes("#")
+    ) {
+      throw new Error(
+        "must be an HTTP(S) URL without credentials, query, or fragment",
+      );
+    }
+  },
 });
 
 /**
@@ -136,6 +171,66 @@ export function createConfig() {
         format: String,
         default: "keyboard cat",
         env: "SERVER_SESSION_SECRET",
+      },
+    },
+    twingate: {
+      gateway: {
+        enabled: {
+          doc: "Whether Twingate Gateway manages browser authentication.",
+          format: Boolean,
+          default: false,
+          env: "TWINGATE_GATEWAY_ENABLED",
+        },
+        tenantHost: {
+          doc: "Twingate tenant host that issued Gateway assertions.",
+          format: String,
+          default: "",
+          env: "TWINGATE_TENANT_HOST",
+        },
+        audience: {
+          doc: "Expected audience in Twingate Gateway assertions.",
+          format: String,
+          default: "",
+          env: "TWINGATE_GATEWAY_AUDIENCE",
+        },
+        jwksUrl: {
+          doc: "HTTPS JWKS endpoint for Twingate Gateway assertions.",
+          format: String,
+          default: "",
+          env: "TWINGATE_GATEWAY_JWKS_URL",
+        },
+        resourceAddress: {
+          doc: "Twingate Web App resource address bound to Gateway assertions.",
+          format: String,
+          default: "",
+          env: "TWINGATE_GATEWAY_RESOURCE_ADDRESS",
+        },
+        entryGroup: {
+          doc: "Twingate group required to enter through Gateway.",
+          format: String,
+          default: "",
+          env: "TWINGATE_GATEWAY_ENTRY_GROUP",
+        },
+        enrollment: {
+          enabled: {
+            doc: "Whether Gateway may enroll previously unmapped identities.",
+            format: Boolean,
+            default: false,
+            env: "TWINGATE_GATEWAY_ENROLLMENT_ENABLED",
+          },
+          teamAccountId: {
+            doc: "Team account that newly enrolled Gateway identities join.",
+            format: String,
+            default: "",
+            env: "TWINGATE_GATEWAY_ENROLLMENT_TEAM_ACCOUNT_ID",
+          },
+          reviewerProjectIds: {
+            doc: "Live projects where newly enrolled Gateway identities are reviewers.",
+            format: "string-array",
+            default: new Array<string>(),
+            env: "TWINGATE_GATEWAY_ENROLLMENT_REVIEWER_PROJECT_IDS",
+          },
+        },
       },
     },
     webauthn: {
@@ -257,6 +352,14 @@ export function createConfig() {
         env: "RESEND_WEBHOOK_SECRET",
       },
     },
+    email: {
+      enabled: {
+        doc: "Whether email sending is enabled",
+        format: Boolean,
+        default: true,
+        env: "EMAIL_ENABLED",
+      },
+    },
     s3: {
       screenshotsBucket: {
         doc: "Bucket containing screenshots",
@@ -269,6 +372,18 @@ export function createConfig() {
         format: String,
         default: "eu-west-1",
         env: "S3_REGION",
+      },
+      endpoint: {
+        doc: "S3 endpoint for screenshots",
+        format: "http-url",
+        default: "",
+        env: "AWS_ENDPOINT_URL_S3",
+      },
+      forcePathStyle: {
+        doc: "Use path-style S3 requests",
+        format: Boolean,
+        default: false,
+        env: "S3_FORCE_PATH_STYLE",
       },
       publicImageBaseUrl: {
         doc: "Public URL for screenshots",
@@ -740,6 +855,81 @@ export function createConfig() {
   }
 
   config.validate();
+  if (
+    config.get("twingate.gateway.enrollment.enabled") &&
+    !config.get("twingate.gateway.enabled")
+  ) {
+    throw new Error(
+      "TWINGATE_GATEWAY_ENROLLMENT_ENABLED requires TWINGATE_GATEWAY_ENABLED.",
+    );
+  }
+
+  if (config.get("twingate.gateway.enabled")) {
+    const values = {
+      tenantHost: config.get("twingate.gateway.tenantHost").trim(),
+      audience: config.get("twingate.gateway.audience").trim(),
+      jwksUrl: config.get("twingate.gateway.jwksUrl").trim(),
+      resourceAddress: config.get("twingate.gateway.resourceAddress").trim(),
+      entryGroup: config.get("twingate.gateway.entryGroup").trim(),
+    };
+    const placeholder =
+      /^(?:placeholder|change[-_ ]?me|replace[-_ ]?me|todo|tbd|example|<[^>]+>)$/i;
+
+    for (const [name, value] of Object.entries(values)) {
+      if (!value || placeholder.test(value)) {
+        throw new Error(`${name} must be configured when Gateway is enabled.`);
+      }
+    }
+
+    const { jwksUrl: jwksUrlValue, tenantHost } = values;
+    let jwksUrl: URL;
+    try {
+      jwksUrl = new URL(jwksUrlValue);
+    } catch {
+      throw new Error("TWINGATE_GATEWAY_JWKS_URL must be an HTTPS URL.");
+    }
+
+    if (
+      jwksUrl.protocol !== "https:" ||
+      jwksUrl.username ||
+      jwksUrl.password ||
+      jwksUrl.search ||
+      jwksUrl.hash ||
+      jwksUrl.hostname.toLowerCase() !== tenantHost.toLowerCase()
+    ) {
+      throw new Error(
+        "TWINGATE_GATEWAY_JWKS_URL must be an HTTPS URL for TWINGATE_TENANT_HOST without credentials, query, or fragment.",
+      );
+    }
+
+    if (config.get("twingate.gateway.enrollment.enabled")) {
+      const teamAccountId = config.get(
+        "twingate.gateway.enrollment.teamAccountId",
+      );
+      const reviewerProjectIds = config.get(
+        "twingate.gateway.enrollment.reviewerProjectIds",
+      );
+      if (
+        !/^[1-9][0-9]*$/.test(teamAccountId) ||
+        !isValidPgBigInt(teamAccountId)
+      ) {
+        throw new Error(
+          "TWINGATE_GATEWAY_ENROLLMENT_TEAM_ACCOUNT_ID must be a positive canonical PostgreSQL bigint.",
+        );
+      }
+      if (
+        reviewerProjectIds.length === 0 ||
+        new Set(reviewerProjectIds).size !== reviewerProjectIds.length ||
+        reviewerProjectIds.some(
+          (id) => !/^[1-9][0-9]*$/.test(id) || !isValidPgBigInt(id),
+        )
+      ) {
+        throw new Error(
+          "TWINGATE_GATEWAY_ENROLLMENT_REVIEWER_PROJECT_IDS must be a nonempty duplicate-free list of positive canonical PostgreSQL bigints.",
+        );
+      }
+    }
+  }
 
   // The default key is in this file, so secrets encrypted with it are as good
   // as plaintext. And `decrypt` returns what it cannot decrypt instead of

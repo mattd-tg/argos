@@ -1,7 +1,9 @@
+import { S3Client } from "@aws-sdk/client-s3";
 import request from "supertest";
 import { afterEach, describe, expect, it } from "vitest";
 
 import config from "@/config";
+import { getSignedObjectUrl } from "@/storage/signed-url";
 
 import { createAppSecurityHeaders, getConnectSrc } from "./security-headers";
 import { createTestApp } from "./test-util";
@@ -69,24 +71,6 @@ describe("app security headers", () => {
       expect(csp["connect-src"]).toContain("'self'");
     });
 
-    it("allows the screenshots bucket, matched on its whole host", () => {
-      // Screenshots and text snapshots are fetched, not just displayed, so the
-      // bucket needs connect-src as well as img-src.
-      //
-      // Asserted by parsing each entry and anchoring the host, rather than
-      // searching for "amazonaws.com" as a substring: that would also pass for
-      // `https://amazonaws.com.attacker.test`, so it proves nothing about the
-      // origin actually being allowed.
-      const hosts = getConnectSrc()
-        .filter((origin) => origin.startsWith("https://"))
-        .map((origin) => new URL(origin).host);
-      expect(
-        hosts.some((host) =>
-          /^[\w.-]+\.s3\.[\w-]+\.amazonaws\.com$/.test(host),
-        ),
-      ).toBe(true);
-    });
-
     it("allows an explicit WebSocket origin for subscriptions", () => {
       expect(
         getConnectSrc().some((origin) => origin.startsWith("wss://")),
@@ -141,6 +125,90 @@ describe("app security headers", () => {
       for (const origin of csp["media-src"] ?? []) {
         expect(csp["img-src"]).toContain(origin);
       }
+    });
+  });
+
+  describe("screenshot storage origin", () => {
+    const originalBucket = config.get("s3.screenshotsBucket");
+    const originalEndpoint = config.get("s3.endpoint");
+    const originalForcePathStyle = config.get("s3.forcePathStyle");
+
+    afterEach(() => {
+      config.set("s3.screenshotsBucket", originalBucket);
+      config.set("s3.endpoint", originalEndpoint);
+      config.set("s3.forcePathStyle", originalForcePathStyle);
+    });
+
+    it("authorizes signed images through a path-style endpoint", async () => {
+      config.set("s3.screenshotsBucket", "argos-poc-screenshots");
+      config.set("s3.endpoint", "https://objects.example.test");
+      config.set("s3.forcePathStyle", true);
+
+      expect(await getCsp()).toMatchObject({
+        "img-src": expect.arrayContaining(["https://objects.example.test"]),
+        "media-src": expect.arrayContaining(["https://objects.example.test"]),
+        "connect-src": expect.arrayContaining(["https://objects.example.test"]),
+      });
+    });
+
+    it("uses a bucket-prefixed origin for virtual-host endpoints", async () => {
+      config.set("s3.screenshotsBucket", "argos-poc-screenshots");
+      config.set("s3.endpoint", "https://storage.example.test:8443");
+      config.set("s3.forcePathStyle", false);
+
+      expect(await getCsp()).toMatchObject({
+        "img-src": expect.arrayContaining([
+          "https://argos-poc-screenshots.storage.example.test:8443",
+        ]),
+        "media-src": expect.arrayContaining([
+          "https://argos-poc-screenshots.storage.example.test:8443",
+        ]),
+        "connect-src": expect.arrayContaining([
+          "https://argos-poc-screenshots.storage.example.test:8443",
+        ]),
+      });
+    });
+
+    it("keeps the AWS bucket origin without an explicit endpoint", async () => {
+      config.set("s3.screenshotsBucket", "argos-poc-screenshots");
+      config.set("s3.endpoint", "");
+      config.set("s3.forcePathStyle", false);
+
+      expect(await getCsp()).toMatchObject({
+        "img-src": expect.arrayContaining([
+          `https://argos-poc-screenshots.s3.${config.get("s3.region")}.amazonaws.com`,
+        ]),
+        "media-src": expect.arrayContaining([
+          `https://argos-poc-screenshots.s3.${config.get("s3.region")}.amazonaws.com`,
+        ]),
+        "connect-src": expect.arrayContaining([
+          `https://argos-poc-screenshots.s3.${config.get("s3.region")}.amazonaws.com`,
+        ]),
+      });
+    });
+
+    it("authorizes path-style signed URLs on the default AWS endpoint", async () => {
+      config.set("s3.screenshotsBucket", "argos-poc-screenshots");
+      config.set("s3.endpoint", "");
+      config.set("s3.forcePathStyle", true);
+      const signedUrl = await getSignedObjectUrl({
+        s3: new S3Client({
+          region: config.get("s3.region"),
+          forcePathStyle: true,
+          credentials: { accessKeyId: "test", secretAccessKey: "test" },
+        }),
+        Bucket: "argos-poc-screenshots",
+        Key: "screenshot.png",
+        expiresIn: 60,
+        method: "GET",
+      });
+      const { origin } = new URL(signedUrl);
+
+      expect(await getCsp()).toMatchObject({
+        "img-src": expect.arrayContaining([origin]),
+        "media-src": expect.arrayContaining([origin]),
+        "connect-src": expect.arrayContaining([origin]),
+      });
     });
   });
 
