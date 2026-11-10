@@ -397,7 +397,7 @@ export async function initializeSecrets(hmacFile) {
         TWINGATE_GATEWAY_AUDIENCE: new URL(TENANT).hostname.split(".")[0],
         TWINGATE_GATEWAY_JWKS_URL: TENANT + "/api/v1/jwk/ec",
         TWINGATE_GATEWAY_RESOURCE_ADDRESS: "app.argos-poc.internal",
-        TWINGATE_GATEWAY_ENTRY_GROUP: "argos-poc-admins",
+        TWINGATE_GATEWAY_ENTRY_GROUP: identity.entry_group,
         TWINGATE_GATEWAY_ENROLLMENT_ENABLED: "false",
       },
       "Generated runtime",
@@ -452,16 +452,19 @@ export async function stageRuntime({
   patch: suppliedPatch,
 }) {
   const outputs = await deploymentOutputs();
-  const patch = validateStringMap(
-    suppliedPatch ?? (await readProtectedJson(patchFile, "Runtime patch")),
+  const supplied = validateStringMap(
+    suppliedPatch ??
+      (patchFile ? await readProtectedJson(patchFile, "Runtime patch") : {}),
     "Runtime patch",
   );
-  if (
-    !Object.keys(patch).length ||
-    Object.keys(patch).some((key) => !RUNTIME_PATCH_KEYS.has(key))
-  ) {
+  if (Object.keys(supplied).some((key) => !RUNTIME_PATCH_KEYS.has(key))) {
     throw new Error("Unsupported runtime patch");
   }
+  // Terraform owns the entry group, so every candidate follows its output.
+  const patch = {
+    ...supplied,
+    TWINGATE_GATEWAY_ENTRY_GROUP: outputs.deployment.entry_group,
+  };
   const pins = await readProtectedJson(join(STATE, "secret-versions.json"));
   const recordPath = join(STATE, "runtime-candidates.json");
   const records = (await exists(recordPath))
@@ -802,10 +805,10 @@ if (process.argv[1]?.endsWith("/secrets.mjs")) {
     ) {
       console.log(JSON.stringify(await initializeSecrets(args[2])));
     } else if (
-      args.length === 5 &&
+      (args.length === 3 ||
+        (args.length === 5 && args[3] === "--patch-file")) &&
       args[0] === "stage-runtime" &&
-      args[1] === "--from-version" &&
-      args[3] === "--patch-file"
+      args[1] === "--from-version"
     ) {
       console.log(
         JSON.stringify(
@@ -821,7 +824,7 @@ if (process.argv[1]?.endsWith("/secrets.mjs")) {
       );
     } else {
       throw new Error(
-        "Usage: secrets.mjs initialize --hmac-file <protected-json> | stage-runtime --from-version <N> --patch-file <protected-json> | stage-tls [--renew]",
+        "Usage: secrets.mjs initialize --hmac-file <protected-json> | stage-runtime --from-version <N> [--patch-file <protected-json>] | stage-tls [--renew]",
       );
     }
   });

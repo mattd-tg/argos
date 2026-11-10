@@ -13,3 +13,14 @@ variable "storage_ip_filter_enabled" {
   type        = bool
   default     = true
 }
+
+variable "entry_group" {
+  description = "Twingate group whose members may enter Argos. The deploy scripts give Argos the same name as TWINGATE_GATEWAY_ENTRY_GROUP."
+  type        = string
+  default     = "argos-poc-admins"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9][A-Za-z0-9 ._-]*$", var.entry_group))
+    error_message = "entry_group must be a group name of letters, digits, spaces, dots, underscores and hyphens."
+  }
+}

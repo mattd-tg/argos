@@ -27,6 +27,7 @@ import { bootstrap, provisionIdentity } from "./operator.mjs";
 import {
   assertPrivateFile,
   readProtectedJson,
+  readRuntimeVersion,
   readTlsCandidate,
   stageRuntime,
 } from "./secrets.mjs";
@@ -73,7 +74,7 @@ async function verifyAdmission(deployment) {
   const group = groups.find(({ id }) => id === deployment.admin_group_id);
   if (
     !group ||
-    group.name !== "argos-poc-admins" ||
+    group.name !== deployment.entry_group ||
     group.users.pageInfo.hasNextPage ||
     !group.users.edges.some(
       ({ node }) => node.id === deployment.operator_subject,
@@ -260,6 +261,15 @@ async function assertRuntimeCandidate(version, activeVersion, vmId) {
   }
 }
 
+async function assertRuntimeEntryGroup(version, entryGroup) {
+  const runtime = await readRuntimeVersion(version);
+  if (runtime.TWINGATE_GATEWAY_ENTRY_GROUP !== entryGroup) {
+    throw new Error(
+      `Runtime version ${version} admits a different group than Terraform's entry_group. Stage one with: secrets.mjs stage-runtime --from-version ${version}`,
+    );
+  }
+}
+
 async function loadArchive(path) {
   const archive = await assertPrivateFile(path, "Image archive");
   const [hash] = (await run("shasum", ["-a", "256", archive])).stdout.split(
@@ -390,6 +400,7 @@ await entry(async () => {
     pins.RUNTIME_SECRET_VERSION,
     deployment.vm_id,
   );
+  await assertRuntimeEntryGroup(runtimeVersion, deployment.entry_group);
   pins.RUNTIME_SECRET_VERSION = runtimeVersion;
   if (tlsVersion !== undefined) {
     await readTlsCandidate(tlsVersion, pins.TLS_SECRET_VERSION);

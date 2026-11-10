@@ -10,8 +10,9 @@ secrets, and Argos-specific Twingate resources.
 - Twingate tenant/control plane: `https://argospoc.us2.dev.opstg.com`.
 - Native Client network: `argospoc.dev.opstg.com`.
 - Operator: `mattd@twingate.com`, tenant subject `VXNlcjo0NzE4`.
-- Admission group: `argos-poc-admins`. Terraform keeps the operator in it;
-  add and remove everyone else in the Admin Console.
+- Admission group: `argos-poc-admins`, named by the Terraform variable
+  `entry_group`. Terraform keeps the operator in it; add and remove everyone
+  else in the Admin Console.
 - Human application: `https://app.argos-poc.internal`, Gateway-only.
 - Bearer-authenticated API: `https://api.argos-poc.internal`.
 - Signed screenshots:
@@ -178,7 +179,21 @@ registry.
 
 Stage a protected runtime patch from the active numeric version with
 `secrets.mjs stage-runtime`, then run `deploy.mjs update` with the same
-image/version arguments as installation.
+image/version arguments as installation. Every staged runtime takes Argos's
+entry group from Terraform's `entry_group` output, and an update refuses a
+runtime whose group differs from it.
+
+The VM installs the secret loader from instance metadata only at boot. Reboot
+it after any Terraform apply that changes `scripts/load-secrets.py`.
+
+To change the admission group, run these back to back: between steps 1 and 3,
+Argos still expects the old name and rejects everyone.
+
+1. Change `entry_group` in `terraform/variables.tf` and apply Terraform. The
+   group keeps its ID, members, and Resource access.
+2. Stage a runtime with the new name:
+   `node infra/gcp/scripts/secrets.mjs stage-runtime --from-version <active>`.
+3. Deploy the returned version with `deploy.mjs update`.
 
 An update uploads a new release directory, loads its pinned secrets, stops
 `web` and `worker`, and writes a verified `pg_dump -Fc` archive to
