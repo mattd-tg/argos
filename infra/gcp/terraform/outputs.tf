@@ -38,7 +38,7 @@ output "deployment" {
     storage_service_account = google_service_account.storage.email
     remote_network_id       = twingate_remote_network.argos_poc.id
     admin_group_id          = twingate_group.admins.id
-    operator_subject        = one(twingate_group.admins.user_ids)
+    operator_subject        = local.operator_subject
     gateway_id              = twingate_gateway.argos_poc.id
     app_resource_id         = twingate_web_app_resource.app_gateway.id
     api_resource_id         = twingate_resource.api.id
