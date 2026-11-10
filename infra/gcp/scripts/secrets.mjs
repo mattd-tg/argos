@@ -219,7 +219,19 @@ const RUNTIME_PATCH_KEYS = new Set([
   "TWINGATE_GATEWAY_ENROLLMENT_ENABLED",
   "TWINGATE_GATEWAY_ENROLLMENT_TEAM_ACCOUNT_ID",
   "TWINGATE_GATEWAY_ENROLLMENT_REVIEWER_PROJECT_IDS",
+  "GITHUB_LIGHT_APP_ID",
+  "GITHUB_LIGHT_APP_URL",
+  "GITHUB_LIGHT_APP_PRIVATE_KEY",
+  "GITHUB_LIGHT_WEBHOOK_SECRET",
 ]);
+// An env file can carry the GitHub App's PEM key only with its line breaks
+// escaped as `\n`, which Octokit restores. No other value may hold a backslash.
+const ESCAPED_RSA_PEM =
+  /^-----BEGIN RSA PRIVATE KEY-----(?:\\n[A-Za-z0-9+/=]+)+\\n-----END RSA PRIVATE KEY-----(?:\\n)?$/;
+const isSafeEnvironmentValue = (key, item) =>
+  key === "GITHUB_LIGHT_APP_PRIVATE_KEY"
+    ? ESCAPED_RSA_PEM.test(item)
+    : !/[\r\n\0'\\]/.test(item);
 const canonical = (value) =>
   JSON.stringify(
     Object.fromEntries(
@@ -238,7 +250,7 @@ function validateStringMap(value, description) {
       ([key, item]) =>
         !/^[A-Z][A-Z0-9_]*$/.test(key) ||
         typeof item !== "string" ||
-        /[\r\n\0'\\]/.test(item),
+        !isSafeEnvironmentValue(key, item),
     )
   ) {
     throw new Error(description + " must be a safe environment string map");
