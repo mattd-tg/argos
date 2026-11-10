@@ -17,6 +17,12 @@ resource "twingate_group" "admins" {
   user_ids         = ["VXNlcjo0NzE4"]
 }
 
+# GitHub Actions uploads from mattd-tg/argos-wif-demo. Its Service Key is
+# created in the Admin Console so the secret never enters Terraform state.
+resource "twingate_service_account" "ci" {
+  name = "argos-wif-demo-ci"
+}
+
 resource "twingate_resource" "api" {
   name                        = "api.argos-poc.internal"
   address                     = "api.argos-poc.internal"
@@ -39,6 +45,10 @@ resource "twingate_resource" "api" {
 
   access_group {
     group_id = twingate_group.admins.id
+  }
+
+  access_service {
+    service_account_id = twingate_service_account.ci.id
   }
 }
 
@@ -64,6 +74,10 @@ resource "twingate_resource" "storage" {
 
   access_group {
     group_id = twingate_group.admins.id
+  }
+
+  access_service {
+    service_account_id = twingate_service_account.ci.id
   }
 }
 
