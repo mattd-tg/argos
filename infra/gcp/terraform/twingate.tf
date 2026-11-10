@@ -14,7 +14,7 @@ resource "twingate_connector_tokens" "argos_poc" {
 # Argos admits exactly this group's members. Terraform keeps the operator in
 # it; everyone else is added and removed in the Admin Console.
 resource "twingate_group" "admins" {
-  name             = "argos-poc-admins"
+  name             = var.entry_group
   is_authoritative = false
   user_ids         = [local.operator_subject]
 }

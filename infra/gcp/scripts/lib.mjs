@@ -147,6 +147,7 @@ export async function deploymentOutputs() {
     deployment?.bucket_name !== PROJECT + "-argos-poc-screenshots" ||
     !deployment.vm_id ||
     !deployment.network_id ||
+    !deployment.entry_group ||
     !deployment.storage_service_account ||
     !["runtime", "connector", "tls"].every((key) => outputs.secret_ids?.[key])
   ) {

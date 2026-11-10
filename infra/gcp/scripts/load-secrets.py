@@ -43,6 +43,7 @@ REQUIRED_RUNTIME_KEYS = {
     "NODE_EXTRA_CA_CERTS",
     "TRACK_NPM_PACKAGE_VERSIONS",
     "TWINGATE_GATEWAY_ENABLED",
+    "TWINGATE_GATEWAY_ENTRY_GROUP",
     "WILDCARD_DOMAINS",
     "EMAIL_ENABLED",
     "POSTGRES_USER",
@@ -216,7 +217,6 @@ def main() -> int:
         "TWINGATE_GATEWAY_AUDIENCE": "argospoc",
         "TWINGATE_GATEWAY_JWKS_URL": "https://argospoc.us2.dev.opstg.com/api/v1/jwk/ec",
         "TWINGATE_GATEWAY_RESOURCE_ADDRESS": "app.argos-poc.internal",
-        "TWINGATE_GATEWAY_ENTRY_GROUP": "argos-poc-admins",
     }
     if any(runtime.get(key) != value for key, value in expected_gateway.items()):
         raise LoaderError("runtime must retain the owned Gateway identity boundary")
