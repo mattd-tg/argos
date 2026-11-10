@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import re
@@ -183,59 +182,14 @@ def resolve_release(value: str) -> Path:
     return release
 
 
-def prepared_release() -> Path | None:
-    marker = Path("/srv/argos-poc/cutover-in-progress")
-    if not marker.exists():
-        current = Path("/srv/argos-poc/current")
-        return resolve_release(str(current)) if (current / "release.env").is_file() else None
-    authorization = RUN_DIRECTORY / "recovery.json"
-    try:
-        status = authorization.lstat()
-        if authorization.is_symlink() or status.st_uid != 0 or status.st_mode & 0o077:
-            raise LoaderError("recovery authorization is not root-private")
-        permitted = json.loads(authorization.read_text())
-        transition = json.loads(marker.read_text())
-        release = resolve_release(permitted["candidateRelease"])
-        if (
-            transition["candidateRelease"] != str(release)
-            or json.loads((release / "intent.json").read_text()) != transition
-            or permitted["markerSha256"] != hashlib.sha256(marker.read_bytes()).hexdigest()
-            or permitted["releaseSha256"] != hashlib.sha256((release / "release.env").read_bytes()).hexdigest()
-        ):
-            raise LoaderError("recovery authorization does not match the candidate")
-        # Docker must never restore a started application/ingress container during recovery.
-        for directory in Path("/var/lib/docker/containers").glob("*"):
-            config = json.loads((directory / "config.v2.json").read_text())
-            if config.get("Name", "").lstrip("/") not in {
-                "argos-poc-web-1", "argos-poc-worker-1",
-                "argos-poc-app-proxy-1", "argos-poc-api-proxy-1",
-            }:
-                continue
-            host = json.loads((directory / "hostconfig.json").read_text())
-            state = config.get("State", {})
-            never_started = (
-                not state.get("Running", False)
-                and state.get("StartedAt", "").startswith("0001-01-01")
-            )
-            if host.get("RestartPolicy", {}).get("Name") != "no" and not never_started:
-                raise LoaderError("candidate ingress restart policy is not closed")
-        return release
-    except (OSError, KeyError, TypeError, ValueError) as error:
-        raise LoaderError("cutover requires explicit candidate-bound recovery") from error
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description="load a pinned Argos PoC release's secrets")
-    mode = parser.add_mutually_exclusive_group(required=True)
-    mode.add_argument("--release")
-    mode.add_argument("--prepare", action="store_true")
+    parser.add_argument("--release", required=True)
     args = parser.parse_args()
 
     if os.geteuid() != 0:
         raise LoaderError("secret loader must run as root")
-    release = prepared_release() if args.prepare else resolve_release(args.release)
-    if release is None:
-        return 0
+    release = resolve_release(args.release)
     release_environment = read_release_environment(release)
 
     versions: dict[str, str] = {}

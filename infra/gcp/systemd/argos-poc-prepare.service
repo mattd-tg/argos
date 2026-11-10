@@ -1,9 +1,10 @@
 [Unit]
-Description=Prepare pinned Argos PoC secrets before Docker restores containers
+Description=Load the current Argos PoC release's secrets before Docker restores its containers
 Wants=network-online.target
 After=network-online.target
 Before=docker.service
 RequiresMountsFor=/srv/argos-poc
+ConditionPathExists=/srv/argos-poc/current/release.env
 
 [Service]
 Type=oneshot
@@ -11,5 +12,5 @@ RemainAfterExit=yes
 Environment=HOME=/root
 Environment=CLOUDSDK_CORE_DISABLE_PROMPTS=1
 Environment=CLOUDSDK_CORE_LOG_HTTP=False
-ExecStart=/usr/local/lib/argos-poc/load-secrets.py --prepare
+ExecStart=/usr/local/lib/argos-poc/load-secrets.py --release /srv/argos-poc/current
 TimeoutStartSec=5min
