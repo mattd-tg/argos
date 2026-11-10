@@ -443,3 +443,26 @@ describe("#getCIBase (no git provider)", () => {
     });
   });
 });
+
+describe("#getCIBase (GitHub repository without an installation)", () => {
+  beforeEach(async () => {
+    await setupDatabase();
+  });
+
+  test("uses the base commit sent by the build", async ({
+    args,
+    build,
+    project,
+  }) => {
+    const githubRepository = await factory.GithubRepository.create();
+    await project.$query().patch({ githubRepositoryId: githubRepository.id });
+    const baseCommit = "1111111111111111111111111111111111111111";
+    const baseBucket = await createBaseline(project, baseCommit);
+    await build.$query().patch({ baseCommit });
+
+    const result = await getCIBase(args);
+    expect(
+      result.baseBucket && "id" in result.baseBucket && result.baseBucket.id,
+    ).toBe(baseBucket.id);
+  });
+});

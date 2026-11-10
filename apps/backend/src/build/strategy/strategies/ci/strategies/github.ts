@@ -14,12 +14,17 @@ import { MergeBaseStrategy } from "../types";
 
 type Octokit = NonNullable<Awaited<ReturnType<typeof getInstallationOctokit>>>;
 
-export const GithubStrategy: MergeBaseStrategy<{
-  octokit: Octokit;
-  owner: string;
-  repo: string;
-  installation: GithubInstallation;
-}> = {
+export const GithubStrategy: MergeBaseStrategy<
+  | {
+      octokit: Octokit;
+      owner: string;
+      repo: string;
+      installation: GithubInstallation;
+    }
+  // A self-hosted instance without a GitHub App links the repository only to
+  // match GitHub Actions OIDC tokens to the project, so no installation exists.
+  | { installation: null }
+> = {
   detect: (project: Project) => Boolean(project.githubRepositoryId),
   getContext: async (project: Project) => {
     await project.$fetchGraph(
@@ -37,11 +42,9 @@ export const GithubStrategy: MergeBaseStrategy<{
       project.githubRepository,
     );
 
-    invariant(
-      installation,
-      "no installation found, repository should be unlinked from project at this point",
-      UnretryableError,
-    );
+    if (!installation) {
+      return { installation: null };
+    }
 
     const octokit = await getInstallationOctokit(installation);
     if (!octokit) {
@@ -54,23 +57,24 @@ export const GithubStrategy: MergeBaseStrategy<{
   },
 
   getMergeBaseCommitSha: async (args) => {
-    // If the app is light, then we rely on the base commit provided by the user in CLI.
+    const { ctx } = args;
+    // Without an installation, or with the light app, we rely on the base commit provided by the user in CLI.
     // It is already handled in the common logic, so at this point we return null.
     // Note it may indicates a bad setup.
-    if (args.ctx.installation.app === "light") {
+    if (!ctx.installation || ctx.installation.app === "light") {
       return null;
     }
+    const { octokit, owner, repo } = ctx;
 
     return pRetry(
       async () => {
         try {
-          const { data } =
-            await args.ctx.octokit.rest.repos.compareCommitsWithBasehead({
-              owner: args.ctx.owner,
-              repo: args.ctx.repo,
-              basehead: `${args.base}...${args.head}`,
-              per_page: 1,
-            });
+          const { data } = await octokit.rest.repos.compareCommitsWithBasehead({
+            owner,
+            repo,
+            basehead: `${args.base}...${args.head}`,
+            per_page: 1,
+          });
           return data.merge_base_commit.sha;
         } catch (error) {
           // If we can't find the base commit, then we can't give a bucket
@@ -90,19 +94,16 @@ export const GithubStrategy: MergeBaseStrategy<{
     // It can result into diffs that includes changes more recent than the current branch.
     // It is already handled in the common logic, so at this point we list nothing.
     // Note it may indicates a bad setup.
-    if (args.ctx.installation.app === "light") {
+    const { ctx } = args;
+    if (!ctx.installation || ctx.installation.app === "light") {
       return;
     }
+    const { octokit, owner, repo } = ctx;
 
     try {
-      for await (const response of args.ctx.octokit.paginate.iterator(
-        args.ctx.octokit.rest.repos.listCommits,
-        {
-          owner: args.ctx.owner,
-          repo: args.ctx.repo,
-          sha: args.sha,
-          per_page: 100,
-        },
+      for await (const response of octokit.paginate.iterator(
+        octokit.rest.repos.listCommits,
+        { owner, repo, sha: args.sha, per_page: 100 },
       )) {
         yield response.data.map((commit) => commit.sha);
       }
@@ -112,11 +113,9 @@ export const GithubStrategy: MergeBaseStrategy<{
         return;
       }
       if (checkOctokitErrorStatus(404, error)) {
-        throw boom(
-          404,
-          `"${args.sha}" not found on repository "${args.ctx.repo}"`,
-          { retryable: false },
-        );
+        throw boom(404, `"${args.sha}" not found on repository "${repo}"`, {
+          retryable: false,
+        });
       }
       throw error;
     }
