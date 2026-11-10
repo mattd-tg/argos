@@ -4,6 +4,8 @@ locals {
   zone       = "us-east4-a"
   private_ip = "10.87.40.10"
 
+  operator_subject = "VXNlcjo0NzE4"
+
   labels = {
     deployment = "argos-poc"
     keep       = "true"

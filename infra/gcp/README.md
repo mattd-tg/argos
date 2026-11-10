@@ -10,7 +10,8 @@ secrets, and Argos-specific Twingate resources.
 - Twingate tenant/control plane: `https://argospoc.us2.dev.opstg.com`.
 - Native Client network: `argospoc.dev.opstg.com`.
 - Operator: `mattd@twingate.com`, tenant subject `VXNlcjo0NzE4`.
-- Admission group: `argos-poc-admins`.
+- Admission group: `argos-poc-admins`. Terraform keeps the operator in it;
+  add and remove everyone else in the Admin Console.
 - Human application: `https://app.argos-poc.internal`, Gateway-only.
 - Bearer-authenticated API: `https://api.argos-poc.internal`.
 - Signed screenshots:
@@ -26,6 +27,11 @@ The administrative API key is referenced by `provision.env` as
 never put its value in source, Terraform variables, VM metadata, or images.
 Provisioning does not switch the laptop's native Client. Browser acceptance
 requires the operator to sign in to the dedicated tenant.
+
+A group member's first visit to the app creates their Argos account as a team
+contributor. Contributors see only projects with a default access level, and
+new team projects default to Reviewer. Projects created before that default
+existed have none: set theirs to Reviewer in the project's settings.
 
 ## Ownership and cleanup protection
 

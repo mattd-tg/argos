@@ -11,10 +11,12 @@ resource "twingate_connector_tokens" "argos_poc" {
   connector_id = twingate_connector.argos_poc.id
 }
 
+# Argos admits exactly this group's members. Terraform keeps the operator in
+# it; everyone else is added and removed in the Admin Console.
 resource "twingate_group" "admins" {
   name             = "argos-poc-admins"
-  is_authoritative = true
-  user_ids         = ["VXNlcjo0NzE4"]
+  is_authoritative = false
+  user_ids         = [local.operator_subject]
 }
 
 # GitHub Actions uploads from mattd-tg/argos-wif-demo. Its Service Key is
