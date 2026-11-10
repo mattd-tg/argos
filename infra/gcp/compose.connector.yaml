@@ -1,0 +1,31 @@
+name: argos-poc
+
+x-logging: &logging
+  driver: local
+  options:
+    max-size: 10m
+    max-file: "3"
+
+services:
+  connector:
+    image: ${CONNECTOR_IMAGE:?images.env must define CONNECTOR_IMAGE}
+    restart: unless-stopped
+    env_file:
+      - /run/argos-poc/connector.env
+    environment:
+      TWINGATE_URL: https://argospoc.us2.dev.opstg.com
+      TWINGATE_DNS: 127.0.0.11
+      TWINGATE_LOG_LEVEL: "3"
+    networks:
+      edge:
+        ipv4_address: 172.30.87.2
+    mem_limit: 256m
+    logging: *logging
+
+networks:
+  edge:
+    name: argos-poc-edge
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.87.0/24

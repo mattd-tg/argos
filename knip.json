@@ -16,7 +16,11 @@
       "ignoreDependencies": ["@argos/knex-scripts", "pino-pretty"]
     },
     "infra": {
-      "entry": ["scripts/app.ts", "lambda/*.ts"],
+      "entry": [
+        "scripts/app.ts",
+        "lambda/*.ts",
+        "gcp/scripts/{terraform,secrets,deploy}.mjs"
+      ],
       "ignore": ["cloudfront-functions/**/*"]
     },
     "apps/frontend": {

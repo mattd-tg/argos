@@ -1,0 +1,21 @@
+[Unit]
+Description=Argos private PoC release
+Wants=network-online.target
+After=network-online.target docker.service
+Requires=docker.service
+ConditionPathExists=/srv/argos-poc/current/release.env
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+Environment=HOME=/root
+Environment=CLOUDSDK_CORE_DISABLE_PROMPTS=1
+Environment=CLOUDSDK_CORE_LOG_HTTP=False
+ExecStartPre=/usr/bin/test ! -e /srv/argos-poc/cutover-in-progress
+ExecStart=/usr/local/lib/argos-poc/run-release.sh start
+ExecStop=/usr/local/lib/argos-poc/run-release.sh stop
+TimeoutStartSec=20min
+TimeoutStopSec=5min
+
+[Install]
+WantedBy=multi-user.target
