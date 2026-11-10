@@ -309,6 +309,16 @@ export class Project extends Model {
   override async $beforeInsert(queryContext: QueryContext) {
     await super.$beforeInsert(queryContext);
     this.token = this.token || Project.generateToken();
+    // Gateway enrollment makes people team contributors, who see only the
+    // projects that grant them a level: a default on every new project lets
+    // each of them review it, including people who enroll later.
+    if (
+      this.defaultUserLevel === undefined &&
+      config.get("twingate.gateway.enrollment.enabled") &&
+      this.accountId === config.get("twingate.gateway.enrollment.teamAccountId")
+    ) {
+      this.defaultUserLevel = "reviewer";
+    }
   }
 
   static async getPermissions(

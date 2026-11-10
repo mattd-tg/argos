@@ -40,6 +40,7 @@ import {
   UserEmail,
   UserSession,
 } from "@/database/models";
+import { createProject } from "@/database/services/project";
 import {
   getGatewayMappedUser,
   provisionGatewayIdentity,
@@ -693,6 +694,38 @@ describe("Twingate Gateway browser authentication", () => {
     expect(ownerAccount.id).not.toBe(account.id);
 
     expect(viewer.user.id).not.toBe(user.id);
+  });
+
+  test("lets enrolled visitors review projects created after they enrolled", async () => {
+    await setupDatabase();
+    const { teamAccount } = await enableEnrollment();
+    const subject = "enrolled-before-project";
+    await documentRequest("/", await signGatewayToken({ subject })).expect(303);
+    const { user } = await getGatewayMappedUser({
+      tenantHost,
+      twingateUserId: subject,
+    });
+    const owner = await factory.User.create();
+    if (!teamAccount.teamId) {
+      throw new Error("Expected a team account");
+    }
+    await TeamUser.query().insert({
+      teamId: teamAccount.teamId,
+      userId: owner.id,
+      userLevel: "owner",
+    });
+
+    const project = await createProject({
+      account: teamAccount,
+      user: owner,
+      name: "created-after-enrollment",
+    });
+
+    await expect(project.$getPermissions(user)).resolves.toEqual([
+      "review",
+      "view_settings",
+      "view",
+    ]);
   });
 
   test("creates exactly one identity graph for simultaneous first document requests", async () => {
