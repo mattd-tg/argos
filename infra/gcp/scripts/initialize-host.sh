@@ -101,7 +101,9 @@ fetch_metadata_file argos-poc-secret-loader "$LIBRARY_DIRECTORY/load-secrets.py"
 fetch_metadata_file argos-poc-systemd-unit /etc/systemd/system/argos-poc.service 0644
 fetch_metadata_file argos-poc-prepare-unit /etc/systemd/system/argos-poc-prepare.service 0644
 install -d -m 0755 /etc/systemd/system/docker.service.d
-cat > /etc/systemd/system/docker.service.d/argos-poc.conf <<'DOCKER_PREPARE'
+# Docker restarts the containers at boot. A missing /run/argos-poc bind source would be
+# created as a directory, which the secret loader cannot then replace with the file.
+cat >/etc/systemd/system/docker.service.d/argos-poc.conf <<'DOCKER_PREPARE'
 [Unit]
 Requires=argos-poc-prepare.service
 After=argos-poc-prepare.service
@@ -110,169 +112,25 @@ DOCKER_PREPARE
 cat > "$LIBRARY_DIRECTORY/run-release.sh" <<'RUN_RELEASE'
 #!/usr/bin/env bash
 set -euo pipefail
-export CLOUDSDK_CORE_DISABLE_PROMPTS=1
-export CLOUDSDK_CORE_LOG_HTTP=False
 
-readonly ROOT=/srv/argos-poc
-readonly CURRENT="$ROOT/current"
-
-fail() {
-  printf 'argos-poc release: %s\n' "$*" >&2
-  exit 1
-}
-
-if [ "$#" -eq 3 ] && [ "$1" = --release ]; then
-  release="$(readlink -f "$2")"
-  action="$3"
-elif [ "$#" -eq 1 ]; then
-  [ -L "$CURRENT" ] || fail "no installed release"
-  release="$(readlink -f "$CURRENT")"
-  action="$1"
-else
-  fail "usage: run-release.sh [--release <installed-release>] start|stop"
-fi
-
-[ "$(dirname "$release")" = "$ROOT/releases" ] || fail "release is not an installed Argos PoC release"
-install -d -o root -g root -m 0700 /run/argos-poc
-exec 9>/run/argos-poc/release.lock
-flock -n 9 || fail "another release operation is already running"
-if [ "$action" = start ] && [ -e "$ROOT/cutover-in-progress" ] && [ "${ARGOS_POC_CUTOVER:-0}" != 1 ]; then
-  fail "an operator cutover is in progress"
-fi
-[ -f "$release/release.env" ] || fail "release.env is absent"
-[ -f "$release/images.env" ] || fail "images.env is absent"
-
+release="$(readlink -f /srv/argos-poc/current)"
 compose=(docker compose --project-name argos-poc --project-directory "$release" \
   --env-file "$release/images.env" --env-file "$release/release.env" \
   --env-file /run/argos-poc/connector.env --env-file /run/argos-poc/runtime.env \
   -f "$release/compose.yaml")
 
-case "$action" in
+case "${1:-}" in
   start)
     /usr/local/lib/argos-poc/load-secrets.py --release "$release"
-    python3 - "$release" "${ARGOS_POC_CUTOVER:-0}" <<'VERIFY_INFRA'
-import hashlib
-import json
-from pathlib import Path
-import subprocess
-import sys
-
-release = Path(sys.argv[1])
-cutover = sys.argv[2] == "1"
-
-def command(args):
-    result = subprocess.run(args, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    return result.stdout
-
-try:
-    expected = json.loads((release / "infrastructure-hashes.json").read_text())
-    compose = [
-        "docker", "compose", "--project-name", "argos-poc", "--project-directory", str(release),
-        "--env-file", str(release / "images.env"), "--env-file", str(release / "release.env"),
-        "--env-file", "/run/argos-poc/connector.env", "--env-file", "/run/argos-poc/runtime.env",
-        "-f", str(release / "compose.yaml"),
-    ]
-    model = json.loads(command(compose + ["config", "--format", "json"]))
-    hashes = dict(line.split() for line in command(compose + ["config", "--hash", "*"]).splitlines())
-    names = ["postgres", "redis", "rabbitmq", "connector", "gateway", "app-proxy", "api-proxy"]
-    if sorted(item["name"] for item in expected["services"]) != sorted(names):
-        raise ValueError("infrastructure inventory")
-    containers = json.loads(command(["docker", "inspect"] + ["argos-poc-" + name + "-1" for name in names]))
-    by_name = dict(zip(names, containers))
-    networks = {}
-    for item in expected["services"]:
-        name = item["name"]
-        container = by_name[name]
-        service = model["services"][name]
-        if (
-            container["Id"] != item["id"]
-            or container["Config"]["Image"] != item["image"]
-            or service["image"] != item["image"]
-            or container["Config"]["Labels"]["com.docker.compose.config-hash"] != item["configHash"]
-            or hashes[name] != item["configHash"]
-            or container["HostConfig"].get("PortBindings")
-        ):
-            raise ValueError("infrastructure configuration")
-        if name in {"app-proxy", "api-proxy"} and container["HostConfig"]["RestartPolicy"]["Name"] != ("no" if cutover else "unless-stopped"):
-            raise ValueError("ingress restart policy")
-        desired_networks = {
-            model["networks"][key]["name"]: value for key, value in service["networks"].items()
-        }
-        if set(container["NetworkSettings"]["Networks"]) != set(desired_networks):
-            raise ValueError("container networks")
-        for network_name, connection in desired_networks.items():
-            network = model["networks"][next(
-                key for key in service["networks"] if model["networks"][key]["name"] == network_name
-            )]
-            networks[network_name] = network
-            if connection and connection.get("ipv4_address"):
-                attachment = container["NetworkSettings"]["Networks"][network_name]
-                if attachment.get("IPAMConfig", {}).get("IPv4Address") != connection["ipv4_address"]:
-                    raise ValueError("configured container address")
-                if container["State"]["Running"] and attachment["IPAddress"] != connection["ipv4_address"]:
-                    raise ValueError("static container address")
-        for volume in service.get("volumes", []):
-            if volume["type"] != "bind":
-                raise ValueError("unexpected volume")
-            matches = [mount for mount in container["Mounts"] if mount["Destination"] == volume["target"]]
-            if len(matches) != 1 or matches[0]["Source"] != volume["source"] or matches[0]["RW"] == volume.get("read_only", False):
-                raise ValueError("infrastructure mount")
-    for name, desired in networks.items():
-        observed = json.loads(command(["docker", "network", "inspect", name]))[0]
-        subnets = [item["subnet"] for item in desired.get("ipam", {}).get("config", [])]
-        if (
-            observed["Driver"] != desired.get("driver", "bridge")
-            or observed["Internal"] != desired.get("internal", False)
-            or [item["Subnet"] for item in observed["IPAM"]["Config"]] != subnets
-        ):
-            raise ValueError("network configuration")
-    for item in expected["proxyMounts"]:
-        container = by_name[item["name"]]
-        mount = next(mount for mount in container["Mounts"] if mount["Destination"] == item["target"])
-        if mount["Source"] != item["source"] or mount["RW"] or hashlib.sha256(Path(item["source"]).read_bytes()).hexdigest() != item["sha256"]:
-            raise ValueError("proxy configuration")
-    if cutover:
-        marker = json.loads(Path("/srv/argos-poc/cutover-in-progress").read_text())
-        if marker["candidateRelease"] != str(release):
-            raise ValueError("cutover ownership")
-        override = json.loads((release / "cutover.compose.yaml").read_text())
-        if override != {"services": {"web": {"restart": "no"}, "worker": {"restart": "no"}}}:
-            raise ValueError("cutover override")
-        for name in names:
-            state = by_name[name]["State"]
-            if name in {"app-proxy", "api-proxy"}:
-                if state["Running"]:
-                    raise ValueError("ingress is not closed")
-            elif not state["Running"] or state.get("Health", {}).get("Status", "healthy") != "healthy":
-                raise ValueError("dependency is not healthy")
-    else:
-        applications = json.loads(command(["docker", "inspect", "argos-poc-web-1", "argos-poc-worker-1"]))
-        for name, container in zip(["web", "worker"], applications):
-            service = model["services"][name]
-            environment = dict(value.split("=", 1) for value in container["Config"]["Env"])
-            if (
-                container["Config"]["Image"] != service["image"]
-                or container["HostConfig"].get("PortBindings")
-                or container["HostConfig"]["RestartPolicy"]["Name"] != "unless-stopped"
-                or any(environment.get(key) != str(value) for key, value in service.get("environment", {}).items())
-            ):
-                raise ValueError("application image, ports, restart policy or runtime")
-except Exception:
-    print("argos-poc release: infrastructure/runtime drift guard failed; details withheld", file=sys.stderr)
-    raise SystemExit(1)
-VERIFY_INFRA
-    if [ "${ARGOS_POC_CUTOVER:-0}" = 1 ]; then
-      "${compose[@]}" -f "$release/cutover.compose.yaml" up -d --no-deps --wait web worker
-    else
-      "${compose[@]}" up -d --no-recreate --wait postgres redis rabbitmq connector gateway
-      "${compose[@]}" up -d --no-recreate --wait web worker
-      "${compose[@]}" up -d --no-recreate --wait app-proxy api-proxy
-    fi
+    "${compose[@]}" up -d --wait
     ;;
   stop)
-    "${compose[@]}" stop web worker app-proxy api-proxy gateway connector rabbitmq redis postgres
+    "${compose[@]}" stop
     ;;
-  *) fail "usage: run-release.sh [--release <installed-release>] start|stop" ;;
+  *)
+    printf 'usage: run-release.sh start|stop\n' >&2
+    exit 1
+    ;;
 esac
 RUN_RELEASE
 chmod 0755 "$LIBRARY_DIRECTORY/run-release.sh"

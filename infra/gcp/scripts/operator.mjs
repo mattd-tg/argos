@@ -1,14 +1,6 @@
 import { compose, quote, ssh } from "./lib.mjs";
 
 async function runOperatorCommand(path, bin, parameters) {
-  await ssh(
-    "sudo python3 -c " +
-      quote(
-        "import json; assert json.load(open('/srv/argos-poc/cutover-in-progress'))['candidateRelease'] == " +
-          JSON.stringify(path),
-      ),
-    { sensitive: true },
-  );
   const response = await ssh(
     `sudo ${compose(path)} --profile operator run --rm --no-deps -T bootstrap node ${quote(bin)} ${parameters.map(quote).join(" ")}`,
     { sensitive: true },

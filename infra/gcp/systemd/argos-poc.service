@@ -11,7 +11,6 @@ RemainAfterExit=yes
 Environment=HOME=/root
 Environment=CLOUDSDK_CORE_DISABLE_PROMPTS=1
 Environment=CLOUDSDK_CORE_LOG_HTTP=False
-ExecStartPre=/usr/bin/test ! -e /srv/argos-poc/cutover-in-progress
 ExecStart=/usr/local/lib/argos-poc/run-release.sh start
 ExecStop=/usr/local/lib/argos-poc/run-release.sh stop
 TimeoutStartSec=20min

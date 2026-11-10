@@ -57,9 +57,8 @@ files `0600`. Bootstrap state owns only the state bucket. Main state is stored
 in that bucket under `terraform/`. `terraform-outputs.json` is a protected
 export of actual main outputs, including Connector credentials.
 
-`release.json`, `secret-versions.json`, and `deploy-intent.json` record the
-active release and its VM, numeric secret pins, and any in-progress application
-cutover. Do not import unrelated resources, use targeted/replacement plans, or
+`release.json` and `secret-versions.json` record the active release and its
+VM, and its numeric secret pins. Do not import unrelated resources, use targeted/replacement plans, or
 use an old manual inventory as proof of ownership. The plan validator rejects
 deleting any disk, bucket, secret, or Twingate resource, and the wrapper has no
 destroy command. Every apply lists the validated changes and waits for you to
@@ -149,15 +148,14 @@ The root is limited to `argos-poc.internal` names and to no IP address, so
 whoever trusts it trusts nothing else, even if its key leaks. The helpers refuse
 a retained root without these limits. Leaves are valid for 30 days. The certificate helper renews local leaves when
 fewer than seven days remain; it does not change the active TLS secret or
-container mounts. Use the explicit TLS maintenance workflow below to publish and
-activate renewed leaves. Root replacement requires separate trust and
+container mounts. Use the TLS renewal steps below to publish and activate
+renewed leaves. Root replacement requires separate trust and
 Gateway-registration changes.
 
 ## Images and installation
 
 Build the production Dockerfile for linux/amd64 without SaaS build credentials.
-Infrastructure image digests are pinned in images.json and are read-only during
-deployment. Keep application image archives under protected operator state.
+Infrastructure image digests are pinned in images.json. Keep application image archives under protected operator state.
 Deployment checks the loaded immutable image ID and platform; archive transfers
 also compare local and remote checksums before loading.
 
@@ -179,42 +177,38 @@ registry.
 ## Updates, recovery, and TLS
 
 Stage a protected runtime patch from the active numeric version with
-`secrets.mjs stage-runtime`. Use `deploy.mjs update` with the same image/version
-arguments as installation, or `deploy.mjs resume` to continue a recorded failed
-cutover. Never reset the database to recover an application rollout.
+`secrets.mjs stage-runtime`, then run `deploy.mjs update` with the same
+image/version arguments as installation.
 
-Cutovers close ingress and hold a durable marker. Before an update migrates the
-database, it writes a verified `pg_dump -Fc` archive to
-`/srv/argos-poc/backups/<release-id>.dump` on the data disk and records the path
-in `deploy-intent.json`; resume reuses that archive.
-The host runner and systemd refuse ordinary starts while that marker exists,
-including an interrupted first install before a current-release symlink exists.
-Existing infrastructure is not recreated during application updates. Image,
-configuration, mount, network, or published-port drift fails closed.
+An update uploads a new release directory, loads its pinned secrets, stops
+`web` and `worker`, and writes a verified `pg_dump -Fc` archive to
+`/srv/argos-poc/backups/<release-id>.dump` on the data disk. It then runs the
+migrations, runs `docker compose up -d --wait`, and only then points
+`/srv/argos-poc/current` at the new release. Compose recreates only the
+containers whose image or configuration changed. Gateway and the two HTTPS
+proxies always change, because they mount their configuration from the
+release directory.
 
-Resume also reconciles an interrupted release transfer before the cutover marker
-exists. After a reboot with a marker, only explicit resume can authorize the
-recorded candidate's pinned secrets and Docker startup. Application and proxy
-restart policies stay disabled until the marker is durably removed; ordinary
-boot never restores an unfinished cutover's ingress.
+If a deployment fails, fix the cause and run the same command again: every
+attempt is a new release with its own backup, and `current` still names the
+last release that came up. Never reset the database to recover an application
+rollout. A reboot starts whatever `current` names.
 
 For leaf renewal under the existing root, stage a candidate without changing
 active pins:
 
     node infra/gcp/scripts/secrets.mjs stage-tls --renew
 
-Retries reuse the valid candidate. Activate its returned numeric version using
-the unchanged active image and runtime:
+Retries reuse the valid candidate. Pass its returned numeric version to the
+next update:
 
     node infra/gcp/scripts/deploy.mjs update \
-      --image 'sha256:<active-image-id>' \
-      --runtime-version '<active-runtime-version>' \
+      --image 'sha256:<image-id>' \
+      --runtime-version '<runtime-version>' \
       --tls-version '<staged-tls-version>'
 
-This explicit maintenance recreates only Gateway and the two HTTPS proxies so
-their read-only TLS mounts attach the new files. PostgreSQL, Redis, RabbitMQ,
-Connector, database credentials, and the root remain unchanged. Ordinary
-application updates never perform this infrastructure replacement.
+The recreated Gateway and HTTPS proxies attach the new certificates. The root
+stays unchanged.
 
 After deployment, check health through the connected Argos Client:
 
