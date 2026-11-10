@@ -219,7 +219,7 @@ export function createConfig() {
             env: "TWINGATE_GATEWAY_ENROLLMENT_ENABLED",
           },
           teamAccountId: {
-            doc: "Team account that newly enrolled Gateway identities join.",
+            doc: "Team account that newly enrolled Gateway identities join. They can review every project created in it.",
             format: String,
             default: "",
             env: "TWINGATE_GATEWAY_ENROLLMENT_TEAM_ACCOUNT_ID",
