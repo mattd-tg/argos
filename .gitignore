@@ -41,3 +41,5 @@ storybook-static
 /apps/backend/openapi.yaml
 # Claude
 .claude/settings.local.json
+# Python bytecode
+__pycache__/
