@@ -77,6 +77,9 @@ describe("GET /github-light/install", () => {
       account: fixture.teamAccount,
     });
     expect(res.status).toBe(302);
+    expect(res.headers["location"]).toContain(
+      `/${fixture.teamAccount.slug}/settings/integrations#github-without-content-access`,
+    );
     expect(await getLinkedInstallationId(fixture.teamAccount)).toBe(
       fixture.installation.id,
     );
