@@ -143,6 +143,12 @@ atomically with `onConflict([...]).ignore()` (or `.merge(...)`), and read the
 `.returning(...)` rows when you need to know whether the row was actually
 created (empty array = conflict ignored, e.g. don't send the notification).
 
+**User deletion is a soft delete:** `deleteAccount`
+(`src/graphql/services/account.ts`) only sets `users.deletedAt`, so an
+`ON DELETE CASCADE` on a `userId` foreign key never fires. A new table that
+references users needs its rows removed there explicitly, or they outlive the
+account.
+
 ## GraphQL
 
 - The schema is the source of truth. After editing any `typeDefs` in

@@ -158,6 +158,16 @@ export function useAssertAuthAccount(): AuthAccount {
 }
 
 export function logout(options?: { redirectTo?: string }) {
+  if (config.auth.gatewayManaged) {
+    // Gateway mode re-creates the session on any document request and redirects
+    // back to it, so reloading keeps the user where they were.
+    window.location.replace(
+      options?.redirectTo ??
+        `${window.location.pathname}${window.location.search}`,
+    );
+    return;
+  }
+
   const redirectTo = options?.redirectTo ?? window.location.pathname;
   const search = redirectTo ? `?r=${encodeURIComponent(redirectTo)}` : "";
   // POST (with the CSRF header) so logout can't be forged via a cross-site

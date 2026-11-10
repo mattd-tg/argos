@@ -27,6 +27,20 @@ function getBaseCookieOptions() {
 }
 
 /**
+ * Restore the zero-privilege render hint for an existing real session.
+ */
+export function setLoggedInCookie(
+  res: Response,
+  base = getBaseCookieOptions(),
+): void {
+  res.cookie(LOGGED_IN_COOKIE_NAME, "1", {
+    ...base,
+    httpOnly: false,
+    maxAge: ABSOLUTE_TIMEOUT_MS,
+  });
+}
+
+/**
  * Set both session cookies. Call on login and whenever the session is rotated.
  */
 export function setSessionCookies(res: Response, rawToken: string): void {
@@ -36,11 +50,7 @@ export function setSessionCookies(res: Response, rawToken: string): void {
     httpOnly: true,
     maxAge: ABSOLUTE_TIMEOUT_MS,
   });
-  res.cookie(LOGGED_IN_COOKIE_NAME, "1", {
-    ...base,
-    httpOnly: false,
-    maxAge: ABSOLUTE_TIMEOUT_MS,
-  });
+  setLoggedInCookie(res, base);
 }
 
 /**

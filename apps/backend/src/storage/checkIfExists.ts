@@ -11,8 +11,8 @@ export async function checkIfExists({ s3, ...other }: GetParams) {
   } catch (error) {
     if (
       error instanceof Error &&
-      "Code" in error &&
-      error.Code === "AccessDenied"
+      (error.name === "NoSuchKey" ||
+        ("Code" in error && error.Code === "AccessDenied"))
     ) {
       return false;
     }

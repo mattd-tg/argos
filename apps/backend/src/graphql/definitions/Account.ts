@@ -9,6 +9,7 @@ import { disconnectGitHubAuth } from "@/auth/github";
 import { disconnectGitLabAuth } from "@/auth/gitlab";
 import { disconnectGoogleAuth } from "@/auth/google";
 import { completeLogin } from "@/auth/login";
+import { assertNativeLoginAllowed } from "@/auth/native-login";
 import config from "@/config";
 import { Account, StripeInvoice } from "@/database/models";
 import {
@@ -826,6 +827,7 @@ export const resolvers: IResolvers = {
       return disconnectGoogleAuth(account);
     },
     requestEmailSignup: async (_root, args, ctx) => {
+      assertNativeLoginAllowed();
       const { email } = args;
 
       await requestEmailSignup({
@@ -836,6 +838,7 @@ export const resolvers: IResolvers = {
       return true;
     },
     requestEmailSignin: async (_root, args, ctx) => {
+      assertNativeLoginAllowed();
       const { email } = args;
 
       await requestEmailSignin({
@@ -846,6 +849,7 @@ export const resolvers: IResolvers = {
       return true;
     },
     authenticateWithEmail: async (_root, args, ctx) => {
+      assertNativeLoginAllowed();
       const { email, code } = args.input;
 
       try {

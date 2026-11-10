@@ -17,6 +17,7 @@ export class TeamUser extends Model {
     "gitlab",
     "saml",
     "passkey",
+    "twingate",
   ] as const;
 
   static override jsonSchema = {

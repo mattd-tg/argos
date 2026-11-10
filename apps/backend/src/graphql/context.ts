@@ -112,7 +112,12 @@ export async function getContext(
 export async function getWebSocketContext(
   request: IncomingMessage,
 ): Promise<Context> {
-  const auth = await safeSessionAuthFromExpressReq(request);
+  return createWebSocketContext(await safeSessionAuthFromExpressReq(request));
+}
+
+export function createWebSocketContext(
+  auth: AuthSessionPayload | null,
+): Context {
   return {
     auth,
     requestLocation: null,

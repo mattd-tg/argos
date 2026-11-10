@@ -3,6 +3,7 @@ import { formatRelativeDate } from "@argos/util/date-format";
 import { invariant } from "@argos/util/invariant";
 import { MonitorIcon, SmartphoneIcon } from "lucide-react";
 
+import { config } from "@/config";
 import { logout } from "@/containers/Auth";
 import { DocumentType, graphql } from "@/gql";
 import { Button } from "@/ui/Button";
@@ -242,6 +243,10 @@ function UserSessions(props: { sessions: readonly Session[] }) {
 
   const revoking = useDialogValueState<Session | null>(null);
 
+  function handleLogout() {
+    logout();
+  }
+
   return (
     <Card>
       <CardBody>
@@ -263,15 +268,17 @@ function UserSessions(props: { sessions: readonly Session[] }) {
                   </>
                 }
                 trailing={
-                  <div className="opacity-0 transition group-focus-within:opacity-100 group-hover:opacity-100">
-                    <Button
-                      variant="secondary"
-                      size="small"
-                      onClick={() => logout()}
-                    >
-                      Log out
-                    </Button>
-                  </div>
+                  config.auth.gatewayManaged ? null : (
+                    <div className="opacity-0 transition group-focus-within:opacity-100 group-hover:opacity-100">
+                      <Button
+                        variant="secondary"
+                        size="small"
+                        onClick={handleLogout}
+                      >
+                        Log out
+                      </Button>
+                    </div>
+                  )
                 }
               />
             </ListRow>
@@ -341,17 +348,23 @@ export function UserAuth(props: {
       <Card>
         <CardBody>
           <CardTitle>Authentication</CardTitle>
-          <CardParagraph>
-            Connect your Argos Account with a third-party service to use it for
-            login.
-          </CardParagraph>
-          <div className="flex flex-col gap-2">
-            <EmailAuth account={account} />
-            <PasskeyAuth account={account} />
-            <GitHubAuth account={account} />
-            <GitLabAuth account={account} />
-            <GoogleAuth account={account} />
-          </div>
+          {config.auth.gatewayManaged ? (
+            <CardParagraph>Access is provided by Twingate.</CardParagraph>
+          ) : (
+            <>
+              <CardParagraph>
+                Connect your Argos Account with a third-party service to use it
+                for login.
+              </CardParagraph>
+              <div className="flex flex-col gap-2">
+                <EmailAuth account={account} />
+                <PasskeyAuth account={account} />
+                <GitHubAuth account={account} />
+                <GitLabAuth account={account} />
+                <GoogleAuth account={account} />
+              </div>
+            </>
+          )}
         </CardBody>
       </Card>
     </>

@@ -4,6 +4,7 @@ import express, { Router } from "express";
 import { z } from "zod";
 
 import { completeLogin, startSession, type AuthMethod } from "@/auth/login";
+import { assertNativeLoginAllowed } from "@/auth/native-login";
 import type { AuthSessionPayload } from "@/auth/payload";
 import { consumeSamlAuthCode } from "@/auth/saml";
 import { safeSessionAuthFromExpressReq } from "@/auth/session-request";
@@ -69,6 +70,7 @@ function withOAuth(
     requireCsrf,
     express.json(),
     asyncHandler(async (req, res) => {
+      assertNativeLoginAllowed();
       const auth = await safeSessionAuthFromExpressReq(req);
       try {
         const parsed = OAuthBodySchema.parse(req.body);
@@ -195,6 +197,7 @@ router.use(
   requireCsrf,
   express.json(),
   asyncHandler(async (req, res) => {
+    assertNativeLoginAllowed();
     const parsed = SamlBodySchema.parse(req.body);
     const payload = await consumeSamlAuthCode(parsed.code);
     if (!payload) {

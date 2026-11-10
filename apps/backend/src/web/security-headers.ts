@@ -106,9 +106,15 @@ export function createAppSecurityHeaders(options: {
   ];
 }
 
-/** Virtual-hosted-style origin of the screenshots bucket. */
 function getScreenshotsBucketOrigin(): string {
-  return `https://${config.get("s3.screenshotsBucket")}.s3.${config.get("s3.region")}.amazonaws.com`;
+  const url = new URL(
+    config.get("s3.endpoint") ||
+      `https://s3.${config.get("s3.region")}.amazonaws.com`,
+  );
+  if (config.get("s3.forcePathStyle")) {
+    return url.origin;
+  }
+  return `${url.protocol}//${config.get("s3.screenshotsBucket")}.${url.host}`;
 }
 
 /**

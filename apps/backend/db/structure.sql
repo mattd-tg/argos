@@ -4,8 +4,8 @@
 
 \restrict gmcxLGd4cggGHCd118Wz0JetcpfyTzwJupqLJkVmerBM1NOZhWAI7QncHvekQf1
 
--- Dumped from database version 18.4
--- Dumped by pg_dump version 18.4 (Homebrew)
+-- Dumped from database version 18.6
+-- Dumped by pg_dump version 18.6
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -2902,7 +2902,7 @@ CREATE TABLE public.team_users (
     "ssoVerifiedAt" timestamp with time zone,
     "lastAuthMethod" text,
     "monthlyReportOptedOutAt" timestamp with time zone,
-    CONSTRAINT "team_users_lastAuthMethod_check" CHECK (("lastAuthMethod" = ANY (ARRAY['email'::text, 'google'::text, 'github'::text, 'gitlab'::text, 'saml'::text, 'passkey'::text]))),
+    CONSTRAINT "team_users_lastAuthMethod_check" CHECK (("lastAuthMethod" = ANY (ARRAY['email'::text, 'google'::text, 'github'::text, 'gitlab'::text, 'saml'::text, 'passkey'::text, 'twingate'::text]))),
     CONSTRAINT "team_users_userLevel_check" CHECK (("userLevel" = ANY (ARRAY['owner'::text, 'member'::text, 'contributor'::text])))
 );
 
@@ -3048,6 +3048,43 @@ ALTER SEQUENCE public.tests_id_seq OWNER TO postgres;
 --
 
 ALTER SEQUENCE public.tests_id_seq OWNED BY public.tests.id;
+
+
+--
+-- Name: twingate_gateway_identities; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.twingate_gateway_identities (
+    id bigint NOT NULL,
+    "createdAt" timestamp with time zone NOT NULL,
+    "updatedAt" timestamp with time zone NOT NULL,
+    "tenantHost" text NOT NULL,
+    "twingateUserId" text NOT NULL,
+    "userId" bigint NOT NULL
+);
+
+
+ALTER TABLE public.twingate_gateway_identities OWNER TO postgres;
+
+--
+-- Name: twingate_gateway_identities_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.twingate_gateway_identities_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.twingate_gateway_identities_id_seq OWNER TO postgres;
+
+--
+-- Name: twingate_gateway_identities_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.twingate_gateway_identities_id_seq OWNED BY public.twingate_gateway_identities.id;
 
 
 --
@@ -3757,6 +3794,13 @@ ALTER TABLE ONLY public.teams ALTER COLUMN id SET DEFAULT nextval('public.teams_
 --
 
 ALTER TABLE ONLY public.tests ALTER COLUMN id SET DEFAULT nextval('public.tests_id_seq'::regclass);
+
+
+--
+-- Name: twingate_gateway_identities id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.twingate_gateway_identities ALTER COLUMN id SET DEFAULT nextval('public.twingate_gateway_identities_id_seq'::regclass);
 
 
 --
@@ -4783,6 +4827,30 @@ ALTER TABLE ONLY public.test_stats_fingerprints
 
 ALTER TABLE ONLY public.tests
     ADD CONSTRAINT tests_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: twingate_gateway_identities twingate_gateway_identities_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.twingate_gateway_identities
+    ADD CONSTRAINT twingate_gateway_identities_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: twingate_gateway_identities twingate_gateway_identities_tenanthost_twingateuserid_unique; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.twingate_gateway_identities
+    ADD CONSTRAINT twingate_gateway_identities_tenanthost_twingateuserid_unique UNIQUE ("tenantHost", "twingateUserId");
+
+
+--
+-- Name: twingate_gateway_identities twingate_gateway_identities_userid_unique; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.twingate_gateway_identities
+    ADD CONSTRAINT twingate_gateway_identities_userid_unique UNIQUE ("userId");
 
 
 --
@@ -6849,6 +6917,14 @@ ALTER TABLE ONLY public.tests
 
 
 --
+-- Name: twingate_gateway_identities twingate_gateway_identities_userid_foreign; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.twingate_gateway_identities
+    ADD CONSTRAINT twingate_gateway_identities_userid_foreign FOREIGN KEY ("userId") REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: user_access_token_scopes user_access_token_scopes_accountid_foreign; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -7200,3 +7276,4 @@ INSERT INTO public.knex_migrations(name, batch, migration_time) VALUES ('2026110
 INSERT INTO public.knex_migrations(name, batch, migration_time) VALUES ('20261104101223_encrypt-existing-secrets.js', 1, NOW());
 INSERT INTO public.knex_migrations(name, batch, migration_time) VALUES ('20261104194955_project-awaiting-review-status.js', 1, NOW());
 INSERT INTO public.knex_migrations(name, batch, migration_time) VALUES ('20261105120000_project-auto-approval-enabled.js', 1, NOW());
+INSERT INTO public.knex_migrations(name, batch, migration_time) VALUES ('20261105042222_twingate-gateway-identities.js', 1, NOW());

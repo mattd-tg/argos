@@ -68,6 +68,7 @@ export * from "./TeamScimUser";
 export * from "./TeamUser";
 export * from "./Test";
 export * from "./TestNotificationSubscription";
+export * from "./TwingateGatewayIdentity";
 export * from "./UserAccessToken";
 export * from "./UserAccessTokenScope";
 export * from "./User";

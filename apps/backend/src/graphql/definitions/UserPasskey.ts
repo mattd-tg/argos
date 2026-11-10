@@ -2,6 +2,7 @@ import { invariant } from "@argos/util/invariant";
 import gqlTag from "graphql-tag";
 
 import { completeLogin } from "@/auth/login";
+import { assertNativeLoginAllowed } from "@/auth/native-login";
 import {
   createPasskeyAuthenticationOptions,
   createPasskeyRegistrationOptions,
@@ -116,6 +117,7 @@ export const resolvers: IResolvers = {
   },
   Mutation: {
     createPasskeyRegistrationOptions: async (_root, _args, ctx) => {
+      assertNativeLoginAllowed();
       if (!ctx.auth) {
         throw unauthenticated();
       }
@@ -130,6 +132,7 @@ export const resolvers: IResolvers = {
       });
     },
     registerPasskey: async (_root, args, ctx) => {
+      assertNativeLoginAllowed();
       if (!ctx.auth) {
         throw unauthenticated();
       }
@@ -168,9 +171,11 @@ export const resolvers: IResolvers = {
       return ctx.auth.account;
     },
     createPasskeyAuthenticationOptions: async () => {
+      assertNativeLoginAllowed();
       return createPasskeyAuthenticationOptions();
     },
     authenticateWithPasskey: async (_root, args, ctx) => {
+      assertNativeLoginAllowed();
       const { challengeId, response } = args.input;
       invariant(ctx.req && ctx.res, "Login is only available over HTTP");
 

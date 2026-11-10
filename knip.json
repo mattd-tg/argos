@@ -7,6 +7,7 @@
         "src/processes/proc/*.ts",
         "src/build/bin/*.ts",
         "src/database/bin/*.ts",
+        "src/self-host/bin/*.ts",
         "src/database/testing/index.ts",
         "src/database/testing/workers.ts",
         "src/graphql/definitions/*.ts",

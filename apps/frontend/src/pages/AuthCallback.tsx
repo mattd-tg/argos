@@ -3,6 +3,7 @@ import * as Sentry from "@sentry/react";
 import { Helmet } from "react-helmet";
 import { Navigate, useParams, useSearchParams } from "react-router";
 
+import { config } from "@/config";
 import { useAuth } from "@/containers/Auth";
 import { Layout } from "@/containers/Layout";
 import { Linkify } from "@/containers/Linkify";
@@ -47,7 +48,11 @@ function getLoginUrl(error: unknown) {
   return "/login";
 }
 
-function AuthCallback(props: { provider: AuthProvider }) {
+interface NativeAuthCallbackProps {
+  provider: AuthProvider;
+}
+
+function NativeAuthCallback(props: NativeAuthCallbackProps) {
   const { provider } = props;
   const [searchParams] = useSearchParams();
   const code = searchParams.get("code");
@@ -137,6 +142,28 @@ function ErrorFallback(props: { error: unknown; provider: AuthProvider }) {
 }
 
 export function Component() {
+  const auth = useAuth();
+
+  if (config.auth.gatewayManaged) {
+    if (auth.status === "authenticated") {
+      return <Navigate to="/" replace />;
+    }
+    return (
+      <Layout>
+        <Container>
+          <Helmet>
+            <title>Authentication</title>
+          </Helmet>
+          <p>Access is provided by Twingate.</p>
+        </Container>
+      </Layout>
+    );
+  }
+
+  return <NativeAuthCallbackRoute />;
+}
+
+function NativeAuthCallbackRoute() {
   const params = useParams();
   const { provider } = params;
   if (!provider || !checkIsAuthProvider(provider)) {
@@ -149,7 +176,7 @@ export function Component() {
         <ErrorFallback error={error} provider={provider} />
       )}
     >
-      <AuthCallback provider={provider} />
+      <NativeAuthCallback provider={provider} />
     </Sentry.ErrorBoundary>
   );
 }

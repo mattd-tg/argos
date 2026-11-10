@@ -8,6 +8,7 @@ import { rateLimit } from "express-rate-limit";
 import helmet from "helmet";
 import { z } from "zod";
 
+import { assertNativeLoginAllowed } from "@/auth/native-login";
 import { revokeSessionByToken } from "@/auth/session";
 import { clearSessionCookies, readSessionCookie } from "@/auth/session-cookie";
 import config from "@/config";
@@ -30,6 +31,7 @@ import invoiceDocumentsRouter from "./invoice-documents";
 import { installMediaShareRoutes } from "./media-share";
 import { requireCsrf } from "./middlewares/csrf";
 import { createAppSecurityHeaders } from "./security-headers";
+import { createTwingateGatewayMiddleware } from "./twingate-gateway";
 import { asyncHandler, subdomain } from "./util";
 
 export const installAppRouter = async (app: express.Application) => {
@@ -44,8 +46,12 @@ export const installAppRouter = async (app: express.Application) => {
   });
 
   router.use(limiter);
+  router.use(createTwingateGatewayMiddleware());
 
   const clientConfig: ClientConfig = {
+    auth: {
+      gatewayManaged: config.get("twingate.gateway.enabled"),
+    },
     samlTeamSlug: config.get("samlTeamSlug"),
     sentry: {
       environment: config.get("sentry.environment"),
@@ -205,6 +211,7 @@ export const installAppRouter = async (app: express.Application) => {
   });
 
   router.get("/auth/google/login", (req, res) => {
+    assertNativeLoginAllowed();
     const parsed = OAuthQueryParamsSchema.safeParse(req.query);
     if (!parsed.success) {
       res.redirect("/");
