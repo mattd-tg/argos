@@ -1,0 +1,11 @@
+{
+  "platform": "linux/amd64",
+  "images": {
+    "CONNECTOR_IMAGE": "twingate/connector@sha256:0ef390ef3e526ba7cfb1c6504b794518226188c005087c95205fa9a5b769372a",
+    "GATEWAY_IMAGE": "twingate/gateway@sha256:78fcbb397ab82dda5dda3de9c53e2ad88c2741981be65f211a7766b5ef446717",
+    "POSTGRES_IMAGE": "postgres@sha256:3b0ef735388b2cb097fc29b8bb421d86d57d0ddbe7aa1fbd6493e06d65028503",
+    "REDIS_IMAGE": "redis@sha256:d3eff30f5995e647ed7f22bf73987fb0999f19251c3845a436270c431b65a01a",
+    "RABBITMQ_IMAGE": "rabbitmq@sha256:2b52ee73132c0202b8522c29793f028594aedd00135c76ed757328fa394b0182",
+    "NGINX_IMAGE": "nginx@sha256:0dcc88822d45581e65ae329f8be769762bf628d3b2bb7d2a077d4aa5c98b30e3"
+  }
+}

@@ -1,0 +1,15 @@
+twingate:
+  network: argospoc
+  host: us2.dev.opstg.com
+port: 8443
+metricsPort: 9090
+tls:
+  certificates:
+    files:
+      - certificateFile: /run/argos-poc/gateway.crt
+        privateKeyFile: /run/argos-poc/gateway.key
+webApp:
+  requestHeaders:
+    X-Twingate-GAT: "{{jwt}}"
+upstreamTrustedCABundles:
+  - file: /run/argos-poc/root.crt
