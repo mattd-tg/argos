@@ -98,8 +98,11 @@ HTTPS_PROXY=socks5://127.0.0.1:19080 op run --env-file infra/gcp/provision.env -
 ```
 
 The wrapper passes the proxy only to Terraform, not to its own gcloud/SSH
-commands. Operator credentials stay on the laptop. Live runtime boundary checks
-use a short-lived operator token over SSH stdin, never a persisted operator
+commands. Operator credentials stay on the laptop. Every main plan reads the
+screenshot bucket's live IAM policy and the guard rejects public grants, any
+runtime grant, and any storage-signer role beyond `roles/storage.objectUser`.
+Installation and secret initialization also read the boundary back from the VM
+with a short-lived operator token over SSH stdin, never a persisted operator
 login or a runtime-admin grant. Close the operator tunnel when finished.
 
 ## Fresh provisioning
@@ -202,8 +205,20 @@ image/version arguments as installation. Every staged runtime takes Argos's
 entry group from Terraform's `entry_group` output, and an update refuses a
 runtime whose group differs from it.
 
-The VM installs the secret loader from instance metadata only at boot. Reboot
-it after any Terraform apply that changes `scripts/load-secrets.py`.
+The VM installs the secret loader and release agent from instance metadata only
+when its startup script runs. After a Terraform apply that changes
+`scripts/load-secrets.py`, `scripts/release-agent.py` or their units, re-run it:
+
+    gcloud compute ssh argos-poc --project=twingate-playground --zone=us-east4-a \
+      --tunnel-through-iap --command 'sudo google_metadata_script_runner startup'
+
+`deploy.mjs update` uses no SSH. It writes a release manifest to the releases
+bucket and points the VM's `argos-poc-release` metadata key at it. The
+`argos-poc-release-agent` service on the VM waits on that key, applies the
+release, and reports its state as the `argos-poc/status` guest attribute, which
+the update polls for up to 30 minutes. The agent never retries a failed
+release; `journalctl -u argos-poc-release-agent` on the VM has the details.
+`install` still runs over SSH because it bootstraps the first account.
 
 To change the admission group, run these back to back: between steps 1 and 3,
 Argos still expects the old name and rejects everyone.
@@ -214,7 +229,7 @@ Argos still expects the old name and rejects everyone.
    `node infra/gcp/scripts/secrets.mjs stage-runtime --from-version <active>`.
 3. Deploy the returned version with `deploy.mjs update`.
 
-An update uploads a new release directory, loads its pinned secrets, stops
+An update writes a new release directory, loads its pinned secrets, stops
 `web` and `worker`, and writes a verified `pg_dump -Fc` archive to
 `/srv/argos-poc/backups/<release-id>.dump` on the data disk. It then runs the
 migrations, runs `docker compose up -d --wait`, and only then points

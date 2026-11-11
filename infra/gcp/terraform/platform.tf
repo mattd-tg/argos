@@ -93,6 +93,12 @@ resource "google_storage_bucket_iam_member" "runtime_releases" {
   member = "serviceAccount:${google_service_account.runtime.email}"
 }
 
+# Read on every plan so the plan guard sees grants made outside Terraform,
+# which the non-authoritative iam_member below would never show.
+data "google_storage_bucket_iam_policy" "screenshots" {
+  bucket = google_storage_bucket.screenshots.name
+}
+
 resource "google_storage_bucket_iam_member" "storage_objects" {
   bucket = google_storage_bucket.screenshots.name
   role   = "roles/storage.objectUser"

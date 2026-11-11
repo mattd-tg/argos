@@ -91,6 +91,9 @@ resource "google_compute_instance" "vm" {
     argos-poc-secret-loader = base64encode(file("${path.module}/../scripts/load-secrets.py"))
     argos-poc-systemd-unit  = base64encode(file("${path.module}/../systemd/argos-poc.service"))
     argos-poc-prepare-unit  = base64encode(file("${path.module}/../systemd/argos-poc-prepare.service"))
+    argos-poc-release-agent = base64encode(file("${path.module}/../scripts/release-agent.py"))
+    argos-poc-agent-unit    = base64encode(file("${path.module}/../systemd/argos-poc-release-agent.service"))
+    enable-guest-attributes = "TRUE"
     startup-script          = file("${path.module}/../scripts/initialize-host.sh")
   }
 
@@ -100,8 +103,9 @@ resource "google_compute_instance" "vm" {
     enable_integrity_monitoring = true
   }
 
+  # deploy.mjs points argos-poc-release at the release the VM should run.
   lifecycle {
-    ignore_changes = [attached_disk]
+    ignore_changes = [attached_disk, metadata["argos-poc-release"]]
   }
 }
 
