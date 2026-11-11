@@ -502,13 +502,7 @@ await entry(async () => {
   await verifyAdmission(deployment);
 
   const active = await readActiveRelease();
-  if (
-    initial
-      ? active
-      : !active ||
-        active.vmId !== deployment.vm_id ||
-        !RELEASE.test(active.release)
-  ) {
+  if (initial ? active : !active || active.vmId !== deployment.vm_id) {
     throw new Error("Installation/release ownership guard failed");
   }
   let status = null;
@@ -526,9 +520,6 @@ await entry(async () => {
     }
   } else {
     status = await idleAgent(deployment.releases_bucket);
-    if (status.current !== active.release) {
-      throw new Error("The VM runs a different release than release.json");
-    }
   }
 
   const pins = await readPins(status?.pins);
@@ -563,7 +554,7 @@ await entry(async () => {
     const applied = await publishRelease({
       id,
       bucket: deployment.releases_bucket,
-      from: active.release,
+      from: status.current,
       image,
       archive,
       files,

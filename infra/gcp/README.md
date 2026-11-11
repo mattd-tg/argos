@@ -58,8 +58,10 @@ files `0600`. Bootstrap state owns only the state bucket. Main state is stored
 in that bucket under `terraform/`. `terraform-outputs.json` is a protected
 export of actual main outputs, including Connector credentials.
 
-`release.json` and `secret-versions.json` record the active release and its
-VM, and its numeric secret pins. Do not import unrelated resources, use targeted/replacement plans, or
+`release.json` marks the installation and records its VM and the last release
+the operator deployed; CI deploys do not update it, so `update` takes the
+running release from the release agent's status instead. `secret-versions.json`
+records the numeric secret pins, which CI deploys never change. Do not import unrelated resources, use targeted/replacement plans, or
 use an old manual inventory as proof of ownership. The plan validator rejects
 deleting any disk, bucket, secret, or Twingate resource, and the wrapper has no
 destroy command. Every apply lists the validated changes and waits for you to
