@@ -61,6 +61,38 @@ resource "google_storage_bucket" "screenshots" {
   depends_on = [google_compute_instance.vm]
 }
 
+# Holds release image archives and manifests the VM pulls. Images go to
+# Artifact Registry instead once the runtime account can be granted read
+# access there (see README, "Images and installation").
+resource "google_storage_bucket" "releases" {
+  name                        = "twingate-playground-argos-poc-releases"
+  location                    = local.region
+  uniform_bucket_level_access = true
+  public_access_prevention    = "enforced"
+  force_destroy               = false
+
+  versioning {
+    enabled = true
+  }
+
+  lifecycle_rule {
+    action {
+      type = "Delete"
+    }
+
+    condition {
+      with_state                 = "ARCHIVED"
+      days_since_noncurrent_time = 7
+    }
+  }
+}
+
+resource "google_storage_bucket_iam_member" "runtime_releases" {
+  bucket = google_storage_bucket.releases.name
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:${google_service_account.runtime.email}"
+}
+
 resource "google_storage_bucket_iam_member" "storage_objects" {
   bucket = google_storage_bucket.screenshots.name
   role   = "roles/storage.objectUser"

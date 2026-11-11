@@ -27,6 +27,8 @@ const APPROVED_RESOURCES = new Set([
   "google_service_account.storage",
   "google_storage_bucket.screenshots",
   "google_storage_bucket_iam_member.storage_objects",
+  "google_storage_bucket.releases",
+  "google_storage_bucket_iam_member.runtime_releases",
   "google_secret_manager_secret.deployment",
   "google_secret_manager_secret_iam_member.runtime_accessor",
   "twingate_remote_network.argos_poc",
@@ -43,6 +45,7 @@ const APPROVED_RESOURCES = new Set([
 
 const RETIRED_RESOURCES = new Set([
   "google_artifact_registry_repository.images",
+  "google_artifact_registry_repository_iam_member.runtime_reader",
 ]);
 
 const PROTECTED_TYPES =
@@ -77,13 +80,16 @@ function validateResourceLabels(type, values, address) {
   }
 }
 
+const RELEASES_BUCKET = "twingate-playground-argos-poc-releases";
+
 function validateBucket(values, scope, filterEnabled) {
-  const name =
+  const names =
     scope === "bootstrap"
-      ? "twingate-playground-argos-poc-state"
-      : "twingate-playground-argos-poc-screenshots";
+      ? ["twingate-playground-argos-poc-state"]
+      : ["twingate-playground-argos-poc-screenshots", RELEASES_BUCKET];
+  const name = values.name;
   if (
-    values.name !== name ||
+    !names.includes(name) ||
     values.location?.toUpperCase() !== "US-EAST4" ||
     values.uniform_bucket_level_access !== true ||
     values.public_access_prevention !== "enforced" ||
@@ -92,7 +98,7 @@ function validateBucket(values, scope, filterEnabled) {
   ) {
     throw new Error("Bucket violates the private storage boundary: " + name);
   }
-  if (scope === "bootstrap") {
+  if (scope === "bootstrap" || name === RELEASES_BUCKET) {
     return;
   }
   const filter = values.ip_filter?.[0];
@@ -201,6 +207,15 @@ export function validatePlan(plan, scope) {
       ) {
         throw new Error("Required OS Login/inherited SSH protections missing");
       }
+    }
+    if (
+      change.type === "google_storage_bucket_iam_member" &&
+      after?.bucket === RELEASES_BUCKET &&
+      (after.role !== "roles/storage.objectViewer" ||
+        after.member !==
+          "serviceAccount:argos-poc-runtime@twingate-playground.iam.gserviceaccount.com")
+    ) {
+      throw new Error("Releases bucket grants only runtime read access");
     }
     if (change.type === "google_compute_firewall" && after) {
       if (

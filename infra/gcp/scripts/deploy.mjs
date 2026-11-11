@@ -270,26 +270,21 @@ async function assertRuntimeEntryGroup(version, entryGroup) {
   }
 }
 
-async function loadArchive(path) {
+async function loadArchive(path, bucket) {
   const archive = await assertPrivateFile(path, "Image archive");
   const [hash] = (await run("shasum", ["-a", "256", archive])).stdout.split(
     /\s/,
   );
-  await gcloud(
-    [
-      "compute",
-      "scp",
-      archive,
-      "argos-poc:/tmp/argos-poc-image.tar",
-      "--zone=" + ZONE,
-      "--tunnel-through-iap",
-    ],
-    { sensitive: true },
-  );
+  const object = `gs://${bucket}/images/sha256-${hash}`;
+  await gcloud(["storage", "cp", "--no-clobber", archive, object], {
+    sensitive: true,
+  });
   await remote(
-    `test "$(sha256sum /tmp/argos-poc-image.tar | cut -d' ' -f1)" = ${quote(hash)}\n` +
-      "docker load -i /tmp/argos-poc-image.tar >/dev/null\n" +
-      "rm /tmp/argos-poc-image.tar",
+    "download=$(mktemp /tmp/argos-poc-image.XXXXXX)\n" +
+      `trap 'rm -f "$download"' EXIT\n` +
+      `gcloud storage cp --quiet ${quote(object)} "$download"\n` +
+      `test "$(sha256sum "$download" | cut -d' ' -f1)" = ${quote(hash)}\n` +
+      'docker load -i "$download" >/dev/null',
   );
 }
 
@@ -408,7 +403,7 @@ await entry(async () => {
   }
 
   if (archive) {
-    await loadArchive(archive);
+    await loadArchive(archive, deployment.releases_bucket);
   }
   await verifyImage(image);
   await checkCompose();
