@@ -100,6 +100,8 @@ install -d -o root -g root -m 0755 "$LIBRARY_DIRECTORY"
 fetch_metadata_file argos-poc-secret-loader "$LIBRARY_DIRECTORY/load-secrets.py" 0755
 fetch_metadata_file argos-poc-systemd-unit /etc/systemd/system/argos-poc.service 0644
 fetch_metadata_file argos-poc-prepare-unit /etc/systemd/system/argos-poc-prepare.service 0644
+fetch_metadata_file argos-poc-release-agent "$LIBRARY_DIRECTORY/release-agent.py" 0755
+fetch_metadata_file argos-poc-agent-unit /etc/systemd/system/argos-poc-release-agent.service 0644
 install -d -m 0755 /etc/systemd/system/docker.service.d
 # Docker restarts the containers at boot. A missing /run/argos-poc bind source would be
 # created as a directory, which the secret loader cannot then replace with the file.
@@ -136,9 +138,11 @@ RUN_RELEASE
 chmod 0755 "$LIBRARY_DIRECTORY/run-release.sh"
 
 systemctl daemon-reload
-systemctl enable argos-poc.service
+systemctl enable argos-poc.service argos-poc-release-agent.service
 if [ -f /srv/argos-poc/current/release.env ]; then
   systemctl start argos-poc.service
 fi
 install -d -m 0700 /var/lib/argos-poc
 touch /var/lib/argos-poc/initialized
+# Restart so a re-run of this script picks up a new agent from metadata.
+systemctl restart --no-block argos-poc-release-agent.service

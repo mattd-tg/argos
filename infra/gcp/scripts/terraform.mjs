@@ -29,6 +29,7 @@ const APPROVED_RESOURCES = new Set([
   "google_storage_bucket_iam_member.storage_objects",
   "google_storage_bucket.releases",
   "google_storage_bucket_iam_member.runtime_releases",
+  "data.google_storage_bucket_iam_policy.screenshots",
   "google_secret_manager_secret.deployment",
   "google_secret_manager_secret_iam_member.runtime_accessor",
   "twingate_remote_network.argos_poc",
@@ -141,6 +142,55 @@ function validateBucket(values, scope, filterEnabled) {
   }
 }
 
+const RUNTIME_MEMBER =
+  "serviceAccount:argos-poc-runtime@twingate-playground.iam.gserviceaccount.com";
+const STORAGE_MEMBER =
+  "serviceAccount:argos-poc-storage@twingate-playground.iam.gserviceaccount.com";
+
+function validateScreenshotPolicy(plan) {
+  const created = plan.resource_changes?.some(
+    (change) =>
+      change.address === "google_storage_bucket.screenshots" &&
+      change.change.actions.includes("create"),
+  );
+  if (created) {
+    return;
+  }
+  const policy = [
+    ...modules(plan.prior_state?.values?.root_module),
+    ...modules(plan.planned_values?.root_module),
+  ].find(
+    (resource) =>
+      resource.address === "data.google_storage_bucket_iam_policy.screenshots",
+  )?.values?.policy_data;
+  if (!policy) {
+    throw new Error("Live screenshot bucket IAM policy was not read");
+  }
+  const bindings = JSON.parse(policy).bindings ?? [];
+  if (
+    bindings.some((binding) =>
+      binding.members?.some((member) =>
+        ["allUsers", "allAuthenticatedUsers", RUNTIME_MEMBER].includes(member),
+      ),
+    ) ||
+    !bindings.some(
+      (binding) =>
+        binding.role === "roles/storage.objectUser" &&
+        !binding.condition &&
+        binding.members?.includes(STORAGE_MEMBER),
+    ) ||
+    bindings.some(
+      (binding) =>
+        binding.role !== "roles/storage.objectUser" &&
+        binding.members?.includes(STORAGE_MEMBER),
+    )
+  ) {
+    throw new Error(
+      "Live screenshot bucket IAM violates the private least-privilege boundary",
+    );
+  }
+}
+
 function modules(module) {
   return [
     ...(module?.resources ?? []),
@@ -212,8 +262,7 @@ export function validatePlan(plan, scope) {
       change.type === "google_storage_bucket_iam_member" &&
       after?.bucket === RELEASES_BUCKET &&
       (after.role !== "roles/storage.objectViewer" ||
-        after.member !==
-          "serviceAccount:argos-poc-runtime@twingate-playground.iam.gserviceaccount.com")
+        after.member !== RUNTIME_MEMBER)
     ) {
       throw new Error("Releases bucket grants only runtime read access");
     }
@@ -251,6 +300,9 @@ export function validatePlan(plan, scope) {
   );
   if (scope === "main" && instances.length !== 1) {
     throw new Error("Main plan must contain exactly one VM");
+  }
+  if (scope === "main") {
+    validateScreenshotPolicy(plan);
   }
   console.log(
     `Validated ${changes.length} owned resource changes; no replacement or public app ingress.`,

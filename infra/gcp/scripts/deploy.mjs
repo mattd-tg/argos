@@ -1,6 +1,7 @@
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { parseArgs } from "node:util";
 
 import { imageManifest } from "./images.mjs";
@@ -217,22 +218,12 @@ async function readActiveRelease() {
   }
 }
 
-async function readPins(active) {
+async function readPins(remotePins) {
   const pins = await readProtectedJson(join(STATE, "secret-versions.json"));
   if (!PIN_KEYS.every((key) => VERSION.test(pins[key] ?? ""))) {
     throw new Error("Missing numeric secret pins");
   }
-  if (active) {
-    const { stdout } = await ssh(
-      "sudo cat " + quote(active.release + "/release.env"),
-      { sensitive: true },
-    );
-    const remotePins = Object.fromEntries(
-      stdout
-        .trim()
-        .split("\n")
-        .map((line) => line.split("=")),
-    );
+  if (remotePins) {
     if (PIN_KEYS.some((key) => remotePins[key] !== pins[key])) {
       throw new Error(
         "Active release secret pins differ from protected local state",
@@ -270,7 +261,7 @@ async function assertRuntimeEntryGroup(version, entryGroup) {
   }
 }
 
-async function loadArchive(path, bucket) {
+async function uploadArchive(path, bucket) {
   const archive = await assertPrivateFile(path, "Image archive");
   const [hash] = (await run("shasum", ["-a", "256", archive])).stdout.split(
     /\s/,
@@ -279,6 +270,11 @@ async function loadArchive(path, bucket) {
   await gcloud(["storage", "cp", "--no-clobber", archive, object], {
     sensitive: true,
   });
+  return { object, sha256: hash };
+}
+
+async function loadArchive(path, bucket) {
+  const { object, sha256: hash } = await uploadArchive(path, bucket);
   await remote(
     "download=$(mktemp /tmp/argos-poc-image.XXXXXX)\n" +
       `trap 'rm -f "$download"' EXIT\n` +
@@ -318,15 +314,114 @@ async function uploadRelease(id, files) {
   return path;
 }
 
-function backupDatabase(command, backup) {
-  const partial = backup + ".partial";
-  return (
-    "install -d -m 0700 /srv/argos-poc/backups\n" +
-    `${command} exec -T postgres sh -c ${quote('pg_dump -Fc -U "$POSTGRES_USER" -d "$POSTGRES_DB"')} > ${quote(partial)}\n` +
-    `${command} exec -T postgres pg_restore --list < ${quote(partial)} >/dev/null\n` +
-    `mv -T ${quote(partial)} ${quote(backup)}\n` +
-    "sync -f /srv/argos-poc/backups"
+async function agentStatus() {
+  const result = await gcloud(
+    [
+      "compute",
+      "instances",
+      "get-guest-attributes",
+      "argos-poc",
+      "--zone=" + ZONE,
+      "--query-path=argos-poc/status",
+      "--format=json",
+    ],
+    { allowFailure: true },
   );
+  if (result.code !== 0) {
+    return null;
+  }
+  const [attribute] = JSON.parse(result.stdout);
+  return attribute ? JSON.parse(attribute.value) : null;
+}
+
+async function publishRelease({ id, bucket, from, image, archive, files }) {
+  const manifest = JSON.stringify({
+    id,
+    from,
+    image,
+    archive: archive ? await uploadArchive(archive, bucket) : null,
+    files,
+  });
+  const object = `gs://${bucket}/releases/${id}.json`;
+  const local = join(STATE, "releases", id + ".json");
+  const request = join(STATE, "releases", id + ".request.json");
+  await privateWrite(local, manifest);
+  await gcloud(["storage", "cp", "--no-clobber", local, object]);
+  await privateWrite(
+    request,
+    JSON.stringify({
+      id,
+      manifest: object,
+      sha256: createHash("sha256").update(manifest).digest("hex"),
+    }),
+  );
+  await gcloud([
+    "compute",
+    "instances",
+    "add-metadata",
+    "argos-poc",
+    "--zone=" + ZONE,
+    "--metadata-from-file=argos-poc-release=" + request,
+  ]);
+  await rm(local);
+  await rm(request);
+  console.log(`Published release ${id}; waiting for the VM to apply it.`);
+  const deadline = Date.now() + 30 * 60_000;
+  for (;;) {
+    const status = await agentStatus();
+    if (status?.id === id && status.state === "applied") {
+      return status;
+    }
+    if (status?.id === id && status.state === "failed") {
+      throw new Error("Release agent failed: " + status.error);
+    }
+    if (Date.now() > deadline) {
+      throw new Error("Release agent did not finish within 30 minutes");
+    }
+    await sleep(10_000);
+  }
+}
+
+async function install(
+  deployment,
+  { id, image, archive, files, pins, runtimeVersion },
+) {
+  if (archive) {
+    await loadArchive(archive, deployment.releases_bucket);
+  }
+  await verifyImage(image);
+  const path = await uploadRelease(id, files);
+  const command = compose(path);
+  await remote(
+    `${LOAD_SECRETS} --release ${quote(path)}\n` +
+      `${command} --profile migrate run --rm -T migrate`,
+  );
+  const { userId, teamAccountId, projectId } = await bootstrap(path, {
+    email: OPERATOR_EMAIL,
+    name: "Argos administrator",
+  });
+  await provisionIdentity(path, {
+    subject: deployment.operator_subject,
+    userId,
+  });
+  const { version } = await stageRuntime({
+    fromVersion: runtimeVersion,
+    patch: {
+      TWINGATE_GATEWAY_ENROLLMENT_ENABLED: "true",
+      TWINGATE_GATEWAY_ENROLLMENT_TEAM_ACCOUNT_ID: teamAccountId,
+      TWINGATE_GATEWAY_ENROLLMENT_REVIEWER_PROJECT_IDS: projectId,
+    },
+  });
+  pins.RUNTIME_SECRET_VERSION = version;
+  await remote(
+    `printf '%s' ${quote(envText(pins))} > ${quote(path + "/release.env")}\n` +
+      `${LOAD_SECRETS} --release ${quote(path)}\n` +
+      `${command} up -d --wait\n` +
+      `ln -sfn ${quote(path)} /srv/argos-poc/current.next\n` +
+      "mv -Tf /srv/argos-poc/current.next /srv/argos-poc/current\n" +
+      "systemctl start argos-poc.service",
+  );
+  return path;
 }
 
 await entry(async () => {
@@ -361,7 +456,6 @@ await entry(async () => {
   const outputs = await deploymentOutputs();
   const { deployment } = outputs;
   await verifyVm(outputs);
-  await verifyStorageBoundary(outputs);
   await verifyAdmission(deployment);
 
   const active = await readActiveRelease();
@@ -374,22 +468,33 @@ await entry(async () => {
   ) {
     throw new Error("Installation/release ownership guard failed");
   }
-  const host = await remote(
-    "mountpoint -q /srv/argos-poc\ntest -f /var/lib/argos-poc/initialized\n" +
-      (initial
-        ? "test ! -e /srv/argos-poc/current"
-        : `test "$(readlink -f /srv/argos-poc/current)" = ${quote(active.release)}`),
-    { allowFailure: true },
-  );
-  if (host.code !== 0) {
-    throw new Error(
-      initial
-        ? "The VM is not initialized or already has a current release"
-        : "The VM is not initialized or its current release differs from release.json",
+  let status = null;
+  if (initial) {
+    await verifyStorageBoundary(outputs);
+    const host = await remote(
+      "mountpoint -q /srv/argos-poc\ntest -f /var/lib/argos-poc/initialized\n" +
+        "test ! -e /srv/argos-poc/current",
+      { allowFailure: true },
     );
+    if (host.code !== 0) {
+      throw new Error(
+        "The VM is not initialized or already has a current release",
+      );
+    }
+  } else {
+    status = await agentStatus();
+    if (
+      !status ||
+      status.state === "applying" ||
+      status.current !== active.release
+    ) {
+      throw new Error(
+        "The release agent is not idle on the release in release.json",
+      );
+    }
   }
 
-  const pins = await readPins(active);
+  const pins = await readPins(status?.pins);
   await assertRuntimeCandidate(
     runtimeVersion,
     pins.RUNTIME_SECRET_VERSION,
@@ -401,11 +506,6 @@ await entry(async () => {
     await readTlsCandidate(tlsVersion, pins.TLS_SECRET_VERSION);
     pins.TLS_SECRET_VERSION = tlsVersion;
   }
-
-  if (archive) {
-    await loadArchive(archive, deployment.releases_bucket);
-  }
-  await verifyImage(image);
   await checkCompose();
 
   const id =
@@ -420,48 +520,30 @@ await entry(async () => {
   for (const name of RELEASE_FILES) {
     files[name] = await readFile(join(ROOT, name), "utf8");
   }
-  const path = await uploadRelease(id, files);
-  const command = compose(path);
-  const backup = initial ? null : `/srv/argos-poc/backups/${id}.dump`;
 
-  await remote(
-    `${LOAD_SECRETS} --release ${quote(path)}\n` +
-      (backup
-        ? `${command} stop web worker\n${backupDatabase(command, backup)}\n`
-        : "") +
-      `${command} --profile migrate run --rm -T migrate`,
-  );
-
+  let path;
+  let backup = null;
   if (initial) {
-    const { userId, teamAccountId, projectId } = await bootstrap(path, {
-      email: OPERATOR_EMAIL,
-      name: "Argos administrator",
+    path = await install(deployment, {
+      id,
+      image,
+      archive,
+      files,
+      pins,
+      runtimeVersion,
     });
-    await provisionIdentity(path, {
-      subject: deployment.operator_subject,
-      userId,
+  } else {
+    const applied = await publishRelease({
+      id,
+      bucket: deployment.releases_bucket,
+      from: active.release,
+      image,
+      archive,
+      files,
     });
-    const { version } = await stageRuntime({
-      fromVersion: runtimeVersion,
-      patch: {
-        TWINGATE_GATEWAY_ENROLLMENT_ENABLED: "true",
-        TWINGATE_GATEWAY_ENROLLMENT_TEAM_ACCOUNT_ID: teamAccountId,
-        TWINGATE_GATEWAY_ENROLLMENT_REVIEWER_PROJECT_IDS: projectId,
-      },
-    });
-    pins.RUNTIME_SECRET_VERSION = version;
-    await remote(
-      `printf '%s' ${quote(envText(pins))} > ${quote(path + "/release.env")}\n` +
-        `${LOAD_SECRETS} --release ${quote(path)}`,
-    );
+    path = applied.current;
+    backup = applied.backup;
   }
-
-  await remote(
-    `${command} up -d --wait\n` +
-      `ln -sfn ${quote(path)} /srv/argos-poc/current.next\n` +
-      "mv -Tf /srv/argos-poc/current.next /srv/argos-poc/current\n" +
-      "systemctl start argos-poc.service",
-  );
   await save("secret-versions.json", pins);
   await save("release.json", { release: path, image, vmId: deployment.vm_id });
   console.log(

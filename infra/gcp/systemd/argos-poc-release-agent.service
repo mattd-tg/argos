@@ -1,0 +1,17 @@
+[Unit]
+Description=Apply the Argos PoC release named in instance metadata
+Wants=network-online.target
+After=network-online.target docker.service argos-poc.service
+Requires=docker.service
+RequiresMountsFor=/srv/argos-poc
+
+[Service]
+Environment=HOME=/root
+Environment=CLOUDSDK_CORE_DISABLE_PROMPTS=1
+Environment=CLOUDSDK_CORE_LOG_HTTP=False
+ExecStart=/usr/local/lib/argos-poc/release-agent.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
