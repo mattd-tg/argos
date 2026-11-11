@@ -145,6 +145,7 @@ export async function deploymentOutputs() {
     deployment?.private_ip !== PRIVATE_IP ||
     deployment?.operator_subject !== OPERATOR_SUBJECT ||
     deployment?.bucket_name !== PROJECT + "-argos-poc-screenshots" ||
+    deployment?.releases_bucket !== PROJECT + "-argos-poc-releases" ||
     !deployment.vm_id ||
     !deployment.network_id ||
     !deployment.entry_group ||

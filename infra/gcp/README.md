@@ -157,8 +157,9 @@ Gateway-registration changes.
 
 Build the production Dockerfile for linux/amd64 without SaaS build credentials.
 Infrastructure image digests are pinned in images.json. Keep application image archives under protected operator state.
-Deployment checks the loaded immutable image ID and platform; archive transfers
-also compare local and remote checksums before loading.
+Deployment checks the loaded immutable image ID and platform. `--archive`
+uploads the archive to the releases bucket under its sha256, and the VM
+downloads it and compares checksums before loading.
 
     node infra/gcp/scripts/deploy.mjs install \
       --image 'sha256:<loaded-image-id>' \
@@ -171,8 +172,26 @@ configured Twingate operator, and enables team/project enrollment. Subsequent
 updates do not reconcile or reset application accounts. Manage projects and CI
 tokens through the normal application UI.
 
+Release archives and manifests go to the private
+`twingate-playground-argos-poc-releases` bucket, which only the runtime service
+account reads.
+
+**Follow-up: move images to Artifact Registry.** A bucket was chosen only
+because the operator's `roles/editor` can grant bucket access but not
+repository access. Each deploy uploads the whole archive, where a registry
+would push only changed layers. To switch, have a `gcp-playground-admins`
+owner run:
+
+    gcloud artifacts repositories add-iam-policy-binding argos-poc \
+      --project=twingate-playground --location=us-east4 \
+      --member=user:mattd@twingate.com --role=roles/artifactregistry.admin
+
+then add the `argos-poc` Docker repository (immutable tags) with
+`roles/artifactregistry.reader` for the runtime account, and have the manifest
+name an image digest instead of an archive object.
+
 Email is disabled and no Resend credential is installed. Application containers
-use the IAP-loaded image with pull_policy: never; the VM never pulls it from a
+use the loaded image with pull_policy: never; the VM never pulls it from a
 registry.
 
 ## Updates, recovery, and TLS

@@ -244,7 +244,12 @@ export async function preflight(scope = "main") {
   const bootstrap = stateResources(await ownedState("bootstrap"));
   for (const [bucketName, resources] of [
     [PROJECT + "-argos-poc-state", bootstrap],
-    ...(scope === "main" ? [[PROJECT + "-argos-poc-screenshots", owned]] : []),
+    ...(scope === "main"
+      ? [
+          [PROJECT + "-argos-poc-screenshots", owned],
+          [PROJECT + "-argos-poc-releases", owned],
+        ]
+      : []),
   ]) {
     // The screenshot bucket's IP filter intentionally denies laptop metadata reads.
     // Existing state establishes ownership; Terraform performs refresh over the allowed operator path.
