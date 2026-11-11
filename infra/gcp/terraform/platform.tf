@@ -99,6 +99,50 @@ data "google_storage_bucket_iam_policy" "screenshots" {
   bucket = google_storage_bucket.screenshots.name
 }
 
+# The release agent reports its state here; it may write nothing else.
+resource "google_storage_bucket_iam_member" "runtime_status" {
+  bucket = google_storage_bucket.releases.name
+  role   = "roles/storage.objectUser"
+  member = "serviceAccount:${google_service_account.runtime.email}"
+
+  condition {
+    title      = "release-agent-status"
+    expression = "resource.name.startsWith(\"projects/_/buckets/${google_storage_bucket.releases.name}/objects/status/\")"
+  }
+}
+
+# GitHub Actions on main of mattd-tg/argos (matched by repository ID, which
+# survives renames) reaches GCP through this pool. The operator cannot grant
+# service account impersonation, so its principal is granted on the releases
+# bucket directly.
+resource "google_iam_workload_identity_pool" "github" {
+  workload_identity_pool_id = "argos-poc-github"
+  display_name              = "Argos PoC GitHub Actions"
+}
+
+resource "google_iam_workload_identity_pool_provider" "github" {
+  workload_identity_pool_id          = google_iam_workload_identity_pool.github.workload_identity_pool_id
+  workload_identity_pool_provider_id = "github"
+  attribute_mapping = {
+    "google.subject"          = "assertion.sub"
+    "attribute.repository_id" = "assertion.repository_id"
+  }
+  attribute_condition = "assertion.repository_id == \"${local.github_repository_id}\" && assertion.ref == \"refs/heads/main\""
+
+  oidc {
+    issuer_uri = "https://token.actions.githubusercontent.com"
+  }
+}
+
+resource "google_storage_bucket_iam_member" "ci_releases" {
+  bucket = google_storage_bucket.releases.name
+  role   = "roles/storage.objectUser"
+  # Spelled out rather than read from the pool so the plan guard can check it.
+  member = "principalSet://iam.googleapis.com/projects/${local.project_number}/locations/global/workloadIdentityPools/${google_iam_workload_identity_pool.github.workload_identity_pool_id}/attribute.repository_id/${local.github_repository_id}"
+
+  depends_on = [google_iam_workload_identity_pool_provider.github]
+}
+
 resource "google_storage_bucket_iam_member" "storage_objects" {
   bucket = google_storage_bucket.screenshots.name
   role   = "roles/storage.objectUser"

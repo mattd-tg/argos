@@ -86,6 +86,7 @@ export async function checkProvisioningPermissions() {
     "iam.serviceAccounts.create",
     "secretmanager.secrets.create",
     "storage.buckets.create",
+    "iam.workloadIdentityPools.create",
   ];
   const response = await fetch(
     "https://cloudresourcemanager.googleapis.com/v1/projects/" +

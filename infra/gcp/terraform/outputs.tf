@@ -45,6 +45,7 @@ output "deployment" {
     api_resource_id         = twingate_resource.api.id
     bucket_resource_id      = twingate_resource.storage.id
     releases_bucket         = google_storage_bucket.releases.name
+    github_provider         = google_iam_workload_identity_pool_provider.github.name
   }
 }
 
