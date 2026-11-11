@@ -1,10 +1,13 @@
 locals {
-  project    = "twingate-playground"
-  region     = "us-east4"
-  zone       = "us-east4-a"
-  private_ip = "10.87.40.10"
+  project        = "twingate-playground"
+  project_number = "417269620845"
+  region         = "us-east4"
+  zone           = "us-east4-a"
+  private_ip     = "10.87.40.10"
 
   operator_subject = "VXNlcjo0NzE4"
+
+  github_repository_id = "1451923766"
 
   labels = {
     deployment = "argos-poc"

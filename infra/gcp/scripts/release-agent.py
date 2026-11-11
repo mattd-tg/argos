@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Apply the Argos PoC release that deploy.mjs names in instance metadata."""
+"""Apply the Argos PoC release that the releases bucket's current.json names."""
 
 from __future__ import annotations
 
@@ -10,14 +10,24 @@ import re
 import subprocess
 import tempfile
 import time
-import urllib.error
-import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Any
 
-METADATA = "http://metadata.google.internal/computeMetadata/v1/instance"
-HEADERS = {"Metadata-Flavor": "Google"}
+BUCKET = "gs://twingate-playground-argos-poc-releases"
+POINTER = f"{BUCKET}/current.json"
+STATUS = f"{BUCKET}/status/agent.json"
+POLL_SECONDS = 30
+METADATA = "http://metadata.google.internal/computeMetadata/v1/instance/attributes"
+HOST_ATTRIBUTES = (
+    "startup-script",
+    "argos-poc-secret-loader",
+    "argos-poc-systemd-unit",
+    "argos-poc-prepare-unit",
+    "argos-poc-release-agent",
+    "argos-poc-agent-unit",
+)
+HOST_DIGEST = Path("/var/lib/argos-poc/host-metadata.sha256")
 ROOT = Path("/srv/argos-poc")
 RELEASES = ROOT / "releases"
 CURRENT = ROOT / "current"
@@ -39,29 +49,66 @@ RELEASE_FILES = {
 }
 
 
-def metadata(path: str, **params: str) -> tuple[str, str]:
-    url = f"{METADATA}/{path}?{urllib.parse.urlencode(params)}"
-    timeout = int(params.get("timeout_sec", "0")) + 30
-    request = urllib.request.Request(url, headers=HEADERS)
-    with urllib.request.urlopen(request, timeout=timeout) as response:
-        return response.read().decode(), response.headers.get("ETag", "0")
+def host_metadata_digest() -> str:
+    digest = hashlib.sha256()
+    for name in HOST_ATTRIBUTES:
+        request = urllib.request.Request(
+            f"{METADATA}/{name}", headers={"Metadata-Flavor": "Google"}
+        )
+        with urllib.request.urlopen(request, timeout=30) as response:
+            digest.update(name.encode() + b"\0" + response.read() + b"\0")
+    return digest.hexdigest()
+
+
+def refresh_host() -> None:
+    digest = host_metadata_digest()
+    if not HOST_DIGEST.exists():
+        # The startup script that installed this agent just ran on this metadata.
+        HOST_DIGEST.write_text(digest)
+        return
+    if HOST_DIGEST.read_text() == digest:
+        return
+    # Recorded first: the startup script ends by restarting this agent, which
+    # would otherwise re-run it forever.
+    HOST_DIGEST.write_text(digest)
+    print("release agent: host metadata changed; re-running the startup script", flush=True)
+    run(["google_metadata_script_runner", "startup"])
+
+
+def read_pointer() -> str | None:
+    result = subprocess.run(
+        ["gcloud", "storage", "cat", POINTER], capture_output=True, text=True
+    )
+    if result.returncode == 0:
+        return result.stdout
+    if "matched no objects" in result.stderr:
+        return None
+    raise OSError(f"cannot read {POINTER}: {result.stderr.strip()[:500]}")
+
+
+last_report = ""
 
 
 def report(state: str, **fields: Any) -> None:
+    global last_report
     release = current_release()
-    status = {
-        "state": state,
-        "current": str(release) if release else None,
-        "pins": read_env(release / "release.env") if release else {},
-        **fields,
-    }
-    request = urllib.request.Request(
-        f"{METADATA}/guest-attributes/argos-poc/status",
-        data=json.dumps(status).encode(),
-        headers=HEADERS,
-        method="PUT",
+    status = json.dumps(
+        {
+            "state": state,
+            "current": str(release) if release else None,
+            "pins": read_env(release / "release.env") if release else {},
+            **fields,
+        }
     )
-    urllib.request.urlopen(request, timeout=30).close()
+    if status == last_report:
+        return
+    subprocess.run(
+        ["gcloud", "storage", "cp", "--quiet", "-", STATUS],
+        input=status,
+        text=True,
+        check=True,
+    )
+    last_report = status
 
 
 def current_release() -> Path | None:
@@ -214,19 +261,13 @@ def handle(raw: str | None) -> None:
 
 def main() -> None:
     os.umask(0o077)
-    etag = "0"
     while True:
         try:
-            body, etag = metadata(
-                "attributes/",
-                recursive="true",
-                wait_for_change="true",
-                last_etag=etag,
-                timeout_sec="300",
-            )
-            handle(json.loads(body).get("argos-poc-release"))
-        except (urllib.error.URLError, TimeoutError, OSError):
-            time.sleep(5)
+            refresh_host()
+            handle(read_pointer())
+        except (OSError, subprocess.CalledProcessError) as error:
+            print(f"release agent: {error}", flush=True)
+        time.sleep(POLL_SECONDS)
 
 
 if __name__ == "__main__":

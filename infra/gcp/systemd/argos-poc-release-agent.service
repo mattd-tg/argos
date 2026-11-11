@@ -1,5 +1,5 @@
 [Unit]
-Description=Apply the Argos PoC release named in instance metadata
+Description=Apply the Argos PoC release named in the releases bucket
 Wants=network-online.target
 After=network-online.target docker.service argos-poc.service
 Requires=docker.service

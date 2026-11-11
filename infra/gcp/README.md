@@ -205,20 +205,31 @@ image/version arguments as installation. Every staged runtime takes Argos's
 entry group from Terraform's `entry_group` output, and an update refuses a
 runtime whose group differs from it.
 
-The VM installs the secret loader and release agent from instance metadata only
-when its startup script runs. After a Terraform apply that changes
-`scripts/load-secrets.py`, `scripts/release-agent.py` or their units, re-run it:
+The VM installs the secret loader, release agent and their units from instance
+metadata when its startup script runs. The agent re-runs that script within 30
+seconds of a Terraform apply that changes any of them, between releases. If the
+agent itself is down, run it by hand:
 
     gcloud compute ssh argos-poc --project=twingate-playground --zone=us-east4-a \
       --tunnel-through-iap --command 'sudo google_metadata_script_runner startup'
 
 `deploy.mjs update` uses no SSH. It writes a release manifest to the releases
-bucket and points the VM's `argos-poc-release` metadata key at it. The
-`argos-poc-release-agent` service on the VM waits on that key, applies the
-release, and reports its state as the `argos-poc/status` guest attribute, which
-the update polls for up to 30 minutes. The agent never retries a failed
-release; `journalctl -u argos-poc-release-agent` on the VM has the details.
-`install` still runs over SSH because it bootstraps the first account.
+bucket and points `current.json` there at it. The `argos-poc-release-agent`
+service on the VM checks that pointer every 30 seconds, applies the release,
+and writes its state to `status/agent.json`, which the update polls for up to
+30 minutes. The agent never retries a failed release;
+`journalctl -u argos-poc-release-agent` on the VM has the details. `install`
+still runs over SSH because it bootstraps the first account.
+
+The `Argos PoC deploy` workflow (`.github/workflows/argos-poc-deploy.yml`)
+builds the image on GitHub Actions and runs `deploy.mjs ci`, which ships it on
+the secret pins the VM already runs. Run it from main of `mattd-tg/argos`:
+`gh workflow run argos-poc-deploy.yml --ref main`. It signs in through the
+`argos-poc-github` Workload Identity pool, which admits only that repository's
+main branch and can only read and write objects in the releases bucket. CI
+skips the Twingate admission and VM checks that `update` makes, because it has
+no Twingate token or project access; Terraform plans catch that drift. Rotate
+secrets and TLS with `update` from the operator laptop.
 
 To change the admission group, run these back to back: between steps 1 and 3,
 Argos still expects the old name and rejects everyone.

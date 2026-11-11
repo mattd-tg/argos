@@ -29,6 +29,10 @@ const APPROVED_RESOURCES = new Set([
   "google_storage_bucket_iam_member.storage_objects",
   "google_storage_bucket.releases",
   "google_storage_bucket_iam_member.runtime_releases",
+  "google_storage_bucket_iam_member.runtime_status",
+  "google_storage_bucket_iam_member.ci_releases",
+  "google_iam_workload_identity_pool.github",
+  "google_iam_workload_identity_pool_provider.github",
   "data.google_storage_bucket_iam_policy.screenshots",
   "google_secret_manager_secret.deployment",
   "google_secret_manager_secret_iam_member.runtime_accessor",
@@ -140,6 +144,25 @@ function validateBucket(values, scope, filterEnabled) {
   ) {
     throw new Error("Screenshot bucket exceeds its CORS or retention boundary");
   }
+}
+
+const GITHUB_CONDITION =
+  'assertion.repository_id == "1451923766" && assertion.ref == "refs/heads/main"';
+const CI_MEMBER =
+  "principalSet://iam.googleapis.com/projects/417269620845/locations/global/workloadIdentityPools/argos-poc-github/attribute.repository_id/1451923766";
+const STATUS_CONDITION = `resource.name.startsWith("projects/_/buckets/${RELEASES_BUCKET}/objects/status/")`;
+
+function isReleasesGrant({ role, member, condition }) {
+  const expression = condition?.[0]?.expression;
+  return (
+    (role === "roles/storage.objectViewer" &&
+      member === RUNTIME_MEMBER &&
+      !expression) ||
+    (role === "roles/storage.objectUser" &&
+      member === RUNTIME_MEMBER &&
+      expression === STATUS_CONDITION) ||
+    (role === "roles/storage.objectUser" && member === CI_MEMBER && !expression)
+  );
 }
 
 const RUNTIME_MEMBER =
@@ -261,10 +284,20 @@ export function validatePlan(plan, scope) {
     if (
       change.type === "google_storage_bucket_iam_member" &&
       after?.bucket === RELEASES_BUCKET &&
-      (after.role !== "roles/storage.objectViewer" ||
-        after.member !== RUNTIME_MEMBER)
+      !isReleasesGrant(after)
     ) {
-      throw new Error("Releases bucket grants only runtime read access");
+      throw new Error(
+        "Releases bucket grants only runtime read, agent status, and CI object access",
+      );
+    }
+    if (
+      change.type === "google_iam_workload_identity_pool_provider" &&
+      after &&
+      (after.attribute_condition !== GITHUB_CONDITION ||
+        after.oidc?.[0]?.issuer_uri !==
+          "https://token.actions.githubusercontent.com")
+    ) {
+      throw new Error("GitHub provider must admit only main of mattd-tg/argos");
     }
     if (change.type === "google_compute_firewall" && after) {
       if (

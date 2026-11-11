@@ -49,8 +49,9 @@ const RELEASE_FILES = [
   "nginx/app.conf",
 ];
 const LOAD_SECRETS = "/usr/local/lib/argos-poc/load-secrets.py";
+const RELEASES_BUCKET = "twingate-playground-argos-poc-releases";
 const USAGE =
-  "Usage: deploy.mjs install|update --image sha256:<image-id> --runtime-version <N> [--archive <protected-tar>] [--tls-version <N> (update only)]";
+  "Usage: deploy.mjs install|update --image sha256:<image-id> --runtime-version <N> [--archive <protected-tar>] [--tls-version <N> (update only)]; deploy.mjs ci --image sha256:<image-id> --archive <protected-tar>";
 
 const save = (name, value) =>
   privateWrite(join(STATE, name), JSON.stringify(value, null, 2) + "\n");
@@ -314,24 +315,26 @@ async function uploadRelease(id, files) {
   return path;
 }
 
-async function agentStatus() {
+async function agentStatus(bucket) {
   const result = await gcloud(
-    [
-      "compute",
-      "instances",
-      "get-guest-attributes",
-      "argos-poc",
-      "--zone=" + ZONE,
-      "--query-path=argos-poc/status",
-      "--format=json",
-    ],
+    ["storage", "cat", `gs://${bucket}/status/agent.json`],
     { allowFailure: true },
   );
   if (result.code !== 0) {
-    return null;
+    if (/matched no objects/.test(result.stderr)) {
+      return null;
+    }
+    throw new Error("Cannot read the release agent status: " + result.stderr);
   }
-  const [attribute] = JSON.parse(result.stdout);
-  return attribute ? JSON.parse(attribute.value) : null;
+  return JSON.parse(result.stdout);
+}
+
+async function idleAgent(bucket) {
+  const status = await agentStatus(bucket);
+  if (!status || status.state === "applying" || !RELEASE.test(status.current)) {
+    throw new Error("The release agent is not idle on an installed release");
+  }
+  return status;
 }
 
 async function publishRelease({ id, bucket, from, image, archive, files }) {
@@ -343,32 +346,20 @@ async function publishRelease({ id, bucket, from, image, archive, files }) {
     files,
   });
   const object = `gs://${bucket}/releases/${id}.json`;
-  const local = join(STATE, "releases", id + ".json");
-  const request = join(STATE, "releases", id + ".request.json");
-  await privateWrite(local, manifest);
-  await gcloud(["storage", "cp", "--no-clobber", local, object]);
-  await privateWrite(
-    request,
-    JSON.stringify({
+  await gcloud(["storage", "cp", "--no-clobber", "-", object], {
+    input: manifest,
+  });
+  await gcloud(["storage", "cp", "-", `gs://${bucket}/current.json`], {
+    input: JSON.stringify({
       id,
       manifest: object,
       sha256: createHash("sha256").update(manifest).digest("hex"),
     }),
-  );
-  await gcloud([
-    "compute",
-    "instances",
-    "add-metadata",
-    "argos-poc",
-    "--zone=" + ZONE,
-    "--metadata-from-file=argos-poc-release=" + request,
-  ]);
-  await rm(local);
-  await rm(request);
+  });
   console.log(`Published release ${id}; waiting for the VM to apply it.`);
   const deadline = Date.now() + 30 * 60_000;
   for (;;) {
-    const status = await agentStatus();
+    const status = await agentStatus(bucket);
     if (status?.id === id && status.state === "applied") {
       return status;
     }
@@ -380,6 +371,47 @@ async function publishRelease({ id, bucket, from, image, archive, files }) {
     }
     await sleep(10_000);
   }
+}
+
+async function releaseFiles(image, pins) {
+  const { images } = await imageManifest();
+  const files = {
+    "images.env": envText({ ...images, ARGOS_IMAGE: image }),
+    "release.env": envText(pins),
+  };
+  for (const name of RELEASE_FILES) {
+    files[name] = await readFile(join(ROOT, name), "utf8");
+  }
+  return files;
+}
+
+const newReleaseId = () =>
+  new Date().toISOString().replaceAll(/[^0-9]/g, "") +
+  "-" +
+  randomBytes(4).toString("hex");
+
+// CI has no Terraform outputs, Twingate token or protected local state: it
+// ships a new image on the pins the VM already runs. Secret and TLS rotations
+// stay with the operator's update.
+async function deployFromCi({ image, archive }) {
+  await checkCompose();
+  const status = await idleAgent(RELEASES_BUCKET);
+  const id = newReleaseId();
+  const applied = await publishRelease({
+    id,
+    bucket: RELEASES_BUCKET,
+    from: status.current,
+    image,
+    archive,
+    files: await releaseFiles(image, status.pins),
+  });
+  console.log(
+    JSON.stringify({
+      release: applied.current,
+      image,
+      backup: applied.backup,
+    }),
+  );
 }
 
 async function install(
@@ -442,6 +474,17 @@ await entry(async () => {
     "tls-version": tlsVersion,
   } = values;
   if (
+    action === "ci" &&
+    positionals.length === 1 &&
+    IMAGE.test(image) &&
+    archive &&
+    !runtimeVersion &&
+    !tlsVersion
+  ) {
+    await deployFromCi({ image, archive });
+    return;
+  }
+  if (
     positionals.length !== 1 ||
     !["install", "update"].includes(action) ||
     !IMAGE.test(image) ||
@@ -482,15 +525,9 @@ await entry(async () => {
       );
     }
   } else {
-    status = await agentStatus();
-    if (
-      !status ||
-      status.state === "applying" ||
-      status.current !== active.release
-    ) {
-      throw new Error(
-        "The release agent is not idle on the release in release.json",
-      );
+    status = await idleAgent(deployment.releases_bucket);
+    if (status.current !== active.release) {
+      throw new Error("The VM runs a different release than release.json");
     }
   }
 
@@ -508,18 +545,8 @@ await entry(async () => {
   }
   await checkCompose();
 
-  const id =
-    new Date().toISOString().replaceAll(/[^0-9]/g, "") +
-    "-" +
-    randomBytes(4).toString("hex");
-  const { images } = await imageManifest();
-  const files = {
-    "images.env": envText({ ...images, ARGOS_IMAGE: image }),
-    "release.env": envText(pins),
-  };
-  for (const name of RELEASE_FILES) {
-    files[name] = await readFile(join(ROOT, name), "utf8");
-  }
+  const id = newReleaseId();
+  const files = await releaseFiles(image, pins);
 
   let path;
   let backup = null;
