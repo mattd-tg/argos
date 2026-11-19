@@ -79,22 +79,31 @@ async function verifyAdmission(deployment) {
     "groups",
     "id name users { edges { node { id } } pageInfo { hasNextPage } } resources { edges { node { id } } pageInfo { hasNextPage } }",
   );
-  const group = groups.find(({ id }) => id === deployment.admin_group_id);
+  const admission = [[deployment.entry_group_id, deployment.entry_group]];
+  if (deployment.admin_group) {
+    admission.push([deployment.admin_group_id, deployment.admin_group]);
+  }
   // An IdP-synced group's members belong to the IdP, so only a group Terraform
   // manages must contain the operator.
   const managed = deployment.entry_group_source === "terraform";
-  if (
-    !group ||
-    group.name !== deployment.entry_group ||
-    (managed &&
-      (group.users.pageInfo.hasNextPage ||
-        !group.users.edges.some(
-          ({ node }) => node.id === deployment.operator_subject,
-        ))) ||
-    groups.some((item) => item.resources.pageInfo.hasNextPage)
-  ) {
+  for (const [id, name] of admission) {
+    const group = groups.find((item) => item.id === id);
+    if (
+      !group ||
+      group.name !== name ||
+      (managed &&
+        (group.users.pageInfo.hasNextPage ||
+          !group.users.edges.some(
+            ({ node }) => node.id === deployment.operator_subject,
+          )))
+    ) {
+      throw new Error("Dedicated admission group drift");
+    }
+  }
+  if (groups.some((item) => item.resources.pageInfo.hasNextPage)) {
     throw new Error("Dedicated admission group drift");
   }
+  const admissionIds = admission.map(([id]) => id).sort();
   for (const [address, id, type] of [
     [HOSTS.app, deployment.app_resource_id, "WebAppResource"],
     [HOSTS.api, deployment.api_resource_id, "NetworkResource"],
@@ -120,7 +129,8 @@ async function verifyAdmission(deployment) {
     const grants = groups.filter((item) =>
       item.resources.edges.some(({ node }) => node.id === id),
     );
-    if (grants.length !== 1 || grants[0].id !== deployment.admin_group_id) {
+    const grantIds = grants.map((item) => item.id).sort();
+    if (JSON.stringify(grantIds) !== JSON.stringify(admissionIds)) {
       throw new Error("Unexpected Resource admission grant");
     }
   }
@@ -263,11 +273,15 @@ async function assertRuntimeCandidate(version, activeVersion, vmId) {
   }
 }
 
-async function assertRuntimeEntryGroup(version, entryGroup) {
+async function assertRuntimeGroups(version, deployment) {
   const runtime = await readRuntimeVersion(version);
-  if (runtime.TWINGATE_GATEWAY_ENTRY_GROUP !== entryGroup) {
+  if (
+    runtime.TWINGATE_GATEWAY_ENTRY_GROUP !== deployment.entry_group ||
+    (runtime.TWINGATE_GATEWAY_ADMIN_GROUP ?? "") !==
+      (deployment.admin_group ?? "")
+  ) {
     throw new Error(
-      `Runtime version ${version} admits a different group than Terraform's entry_group. Stage one with: secrets.mjs stage-runtime --from-version ${version}`,
+      `Runtime version ${version} admits different groups than Terraform's entry_group and admin_group. Stage one with: secrets.mjs stage-runtime --from-version ${version}`,
     );
   }
 }
@@ -541,7 +555,7 @@ await entry(async () => {
     pins.RUNTIME_SECRET_VERSION,
     deployment.vm_id,
   );
-  await assertRuntimeEntryGroup(runtimeVersion, deployment.entry_group);
+  await assertRuntimeGroups(runtimeVersion, deployment);
   pins.RUNTIME_SECRET_VERSION = runtimeVersion;
   if (tlsVersion !== undefined) {
     await readTlsCandidate(tlsVersion, pins.TLS_SECRET_VERSION);

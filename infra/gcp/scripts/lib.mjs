@@ -167,6 +167,8 @@ export async function deploymentOutputs() {
     deployment?.releases_bucket !== BUCKETS.releases ||
     deployment.entry_group !== ENVIRONMENT.twingate.entryGroup ||
     deployment.entry_group_source !== ENVIRONMENT.twingate.entryGroupSource ||
+    deployment.admin_group !== (ENVIRONMENT.twingate.adminGroup ?? null) ||
+    !deployment.admin_group !== !deployment.admin_group_id ||
     !deployment.vm_id ||
     !deployment.network_id ||
     !deployment.entry_group ||

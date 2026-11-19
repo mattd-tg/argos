@@ -50,6 +50,8 @@ const APPROVED_RESOURCES = new Set([
   "twingate_connector_tokens.argos_poc",
   "twingate_group.admins",
   "data.twingate_groups.entry",
+  "twingate_group.owners",
+  "data.twingate_groups.owners",
   "twingate_service_account.ci",
   "twingate_resource.storage",
   "twingate_resource.api",

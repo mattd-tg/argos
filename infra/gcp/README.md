@@ -42,6 +42,15 @@ file and `provision.env`, then provision fresh.
   grants it the Resources. Membership belongs to the IdP, so deploys no longer
   require the operator to be a member.
 
+`twingate.adminGroup` is optional (`null` here). A named group comes from the
+same source as the entry group: Terraform creates it with the operator in it,
+or looks up the synced group. It gets the same three Resources, and Argos
+admits its members too. While enrollment is on, Argos team ownership follows
+it on every request: members become team owners, and owners outside it drop to
+contributor and keep their project grants. That includes the operator, so keep
+the operator in the admin group. With `null`, every enrolled user is a
+contributor with reviewer access, and owners promote others in team settings.
+
 ## Identity and private access
 
 - Twingate tenant/control plane: `https://argospoc.us2.dev.opstg.com`.
@@ -56,8 +65,8 @@ file and `provision.env`, then provision fresh.
 - Signed screenshots:
   `https://twingate-playground-argos-poc-screenshots.storage.googleapis.com`.
 
-The API proxy strips cookies and Gateway assertions. Only the dedicated group
-is granted the app, API, and screenshot Resources. The VM has private address
+The API proxy strips cookies and Gateway assertions. Only the dedicated groups
+are granted the app, API, and screenshot Resources. The VM has private address
 `10.87.40.10`, no public IP, and no published container ports. Its only VPC
 ingress rule permits IAP SSH to the runtime service account.
 
@@ -243,8 +252,8 @@ registry.
 Stage a protected runtime patch from the active numeric version with
 `secrets.mjs stage-runtime`, then run `deploy.mjs update` with the same
 image/version arguments as installation. Every staged runtime takes Argos's
-entry group from Terraform's `entry_group` output (`twingate.entryGroup`), and an update refuses a
-runtime whose group differs from it.
+entry group and admin group from Terraform's `entry_group` and `admin_group`
+outputs, and an update refuses a runtime whose groups differ from them.
 
 The VM installs the secret loader, release agent and their units from instance
 metadata when its startup script runs. The agent re-runs that script within 30
@@ -272,10 +281,11 @@ skips the Twingate admission and VM checks that `update` makes, because it has
 no Twingate token or project access; Terraform plans catch that drift. Rotate
 secrets and TLS with `update` from the operator laptop.
 
-To change the admission group, run these back to back: between steps 1 and 3,
-Argos still expects the old name and rejects everyone.
+To change the entry or admin group, run these back to back: between steps 1
+and 3, Argos still expects the old name and rejects that group's members.
 
-1. Change `twingate.entryGroup` in `environment.json` and apply Terraform.
+1. Change `twingate.entryGroup` or `twingate.adminGroup` in `environment.json`
+   and apply Terraform.
    With `entryGroupSource` `"terraform"`, the group keeps its ID, members, and
    Resource access; with `"idp"`, Terraform grants the Resources to the newly
    named synced group instead.

@@ -16,6 +16,7 @@
     "apiKeyReference": "op://Employee/dvoowk5su2fks5fgfdbs42mece/credential",
     "entryGroup": "argos-poc-admins",
     "entryGroupSource": "terraform",
+    "adminGroup": null,
     "ciServiceAccount": "argos-wif-demo-ci"
   },
   "operator": {

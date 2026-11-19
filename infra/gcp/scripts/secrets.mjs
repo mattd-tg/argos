@@ -400,6 +400,7 @@ export async function initializeSecrets(hmacFile) {
         TWINGATE_GATEWAY_JWKS_URL: TENANT + "/api/v1/jwk/ec",
         TWINGATE_GATEWAY_RESOURCE_ADDRESS: HOSTS.app,
         TWINGATE_GATEWAY_ENTRY_GROUP: identity.entry_group,
+        TWINGATE_GATEWAY_ADMIN_GROUP: identity.admin_group ?? "",
         TWINGATE_GATEWAY_ENROLLMENT_ENABLED: "false",
       },
       "Generated runtime",
@@ -462,10 +463,11 @@ export async function stageRuntime({
   if (Object.keys(supplied).some((key) => !RUNTIME_PATCH_KEYS.has(key))) {
     throw new Error("Unsupported runtime patch");
   }
-  // Terraform owns the entry group, so every candidate follows its output.
+  // Terraform owns both groups, so every candidate follows its outputs.
   const patch = {
     ...supplied,
     TWINGATE_GATEWAY_ENTRY_GROUP: outputs.deployment.entry_group,
+    TWINGATE_GATEWAY_ADMIN_GROUP: outputs.deployment.admin_group ?? "",
   };
   const pins = await readProtectedJson(join(STATE, "secret-versions.json"));
   const recordPath = join(STATE, "runtime-candidates.json");

@@ -17,6 +17,7 @@ locals {
 
   entry_group        = local.environment.twingate.entryGroup
   entry_group_source = local.environment.twingate.entryGroupSource
+  admin_group        = try(local.environment.twingate.adminGroup, null)
 
   labels = {
     deployment = local.name

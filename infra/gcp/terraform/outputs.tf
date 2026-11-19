@@ -37,9 +37,11 @@ output "deployment" {
     bucket_name             = google_storage_bucket.screenshots.name
     storage_service_account = google_service_account.storage.email
     remote_network_id       = twingate_remote_network.argos_poc.id
-    admin_group_id          = local.entry_group_id
+    entry_group_id          = local.entry_group_id
     entry_group             = local.entry_group
     entry_group_source      = local.entry_group_source
+    admin_group_id          = local.admin_group_id
+    admin_group             = local.admin_group
     operator_subject        = local.operator_subject
     gateway_id              = twingate_gateway.argos_poc.id
     app_resource_id         = twingate_web_app_resource.app_gateway.id

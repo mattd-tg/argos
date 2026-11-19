@@ -10,6 +10,13 @@ resource "twingate_remote_network" "argos_poc" {
       condition     = can(regex("^[A-Za-z0-9][A-Za-z0-9 ._-]*$", local.entry_group))
       error_message = "environment.json twingate.entryGroup must be a group name of letters, digits, spaces, dots, underscores and hyphens."
     }
+    precondition {
+      condition = local.admin_group == null || (
+        can(regex("^[A-Za-z0-9][A-Za-z0-9 ._-]*$", local.admin_group)) &&
+        lower(local.admin_group) != lower(local.entry_group)
+      )
+      error_message = "environment.json twingate.adminGroup must be null or a group name, other than entryGroup, of letters, digits, spaces, dots, underscores and hyphens."
+    }
   }
 }
 
@@ -51,12 +58,43 @@ data "twingate_groups" "entry" {
   }
 }
 
+# Members of the optional admin group also enter Argos, as team owners. It
+# comes from the same source as the entry group.
+resource "twingate_group" "owners" {
+  # A fixed key, so renaming the group updates it in place. The provider
+  # rejects a null name even on a zero count.
+  for_each         = local.admin_group != null && local.entry_group_source == "terraform" ? { admin = local.admin_group } : {}
+  name             = each.value
+  is_authoritative = false
+  user_ids         = [local.operator_subject]
+}
+
+data "twingate_groups" "owners" {
+  for_each = local.admin_group != null && local.entry_group_source == "idp" ? { admin = local.admin_group } : {}
+  name     = each.value
+  types    = ["SYNCED"]
+
+  lifecycle {
+    postcondition {
+      condition     = length(self.groups) == 1
+      error_message = "Expected exactly one IdP-synced Twingate group named by environment.json twingate.adminGroup."
+    }
+  }
+}
+
 locals {
   entry_group_id = (
     local.entry_group_source == "terraform"
     ? one(twingate_group.admins[*].id)
     : one(data.twingate_groups.entry[0].groups[*].id)
   )
+  admin_group_id = (
+    local.admin_group == null ? null
+    : local.entry_group_source == "terraform"
+    ? twingate_group.owners["admin"].id
+    : one(data.twingate_groups.owners["admin"].groups[*].id)
+  )
+  access_group_ids = compact([local.entry_group_id, local.admin_group_id])
 }
 
 # GitHub Actions uploads from mattd-tg/argos-wif-demo. Its Service Key is
@@ -87,8 +125,11 @@ resource "twingate_resource" "api" {
     }
   }
 
-  access_group {
-    group_id = local.entry_group_id
+  dynamic "access_group" {
+    for_each = local.access_group_ids
+    content {
+      group_id = access_group.value
+    }
   }
 
   access_service {
@@ -116,8 +157,11 @@ resource "twingate_resource" "storage" {
     }
   }
 
-  access_group {
-    group_id = local.entry_group_id
+  dynamic "access_group" {
+    for_each = local.access_group_ids
+    content {
+      group_id = access_group.value
+    }
   }
 
   access_service {
@@ -156,7 +200,10 @@ resource "twingate_web_app_resource" "app_gateway" {
     "X-Twingate-GAT" = "{{jwt}}"
   }
 
-  access_group {
-    group_id = local.entry_group_id
+  dynamic "access_group" {
+    for_each = local.access_group_ids
+    content {
+      group_id = access_group.value
+    }
   }
 }
