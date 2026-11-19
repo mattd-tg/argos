@@ -80,8 +80,8 @@ const originalGatewayConfig = {
 const tenantHost = "gateway.test";
 const audience = "argos-poc";
 const resourceAddress = "app.argos-poc.internal";
-const entryGroup = "argos-poc-admins";
-const adminGroup = "argos-poc-owners";
+const entryGroup = "argos-poc-reviewers";
+const adminGroup = "argos-poc-admins";
 const jwksUrl = `https://${tenantHost}/api/v1/jwk/ec`;
 
 let privateKey: CryptoKey;

@@ -28,8 +28,8 @@ import { verifyGatewayRequest } from "./twingate-gateway";
 const TENANT_HOST = "gateway.example.test";
 const AUDIENCE = "argospoc";
 const RESOURCE_ADDRESS = "app.argos-poc.internal";
-const ENTRY_GROUP = "argos-poc-admins";
-const ADMIN_GROUP = "argos-poc-owners";
+const ENTRY_GROUP = "argos-poc-reviewers";
+const ADMIN_GROUP = "argos-poc-admins";
 
 const originalGatewayConfig = {
   enabled: config.get("twingate.gateway.enabled"),
@@ -223,7 +223,7 @@ describe("verifyGatewayRequest", () => {
           user: { id: "opaque-id", groups },
         },
       });
-    const adminOnly = await token(["Argos-Poc-Owners"]);
+    const adminOnly = await token(["Argos-Poc-Admins"]);
 
     await expect(
       verifyGatewayRequest(request(adminOnly)),
@@ -258,7 +258,7 @@ describe("verifyGatewayRequest", () => {
     const token = await signGatewayToken({
       payload: {
         resource: { type: "WEB_APP", address: RESOURCE_ADDRESS },
-        user: { id: "opaque-id", groups: ["Argos-Poc-Admins", "Everyone"] },
+        user: { id: "opaque-id", groups: ["Argos-Poc-Reviewers", "Everyone"] },
       },
     });
 

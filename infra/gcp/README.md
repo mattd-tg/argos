@@ -42,7 +42,7 @@ file and `provision.env`, then provision fresh.
   grants it the Resources. Membership belongs to the IdP, so deploys no longer
   require the operator to be a member.
 
-`twingate.adminGroup` is optional (`null` here). A named group comes from the
+`twingate.adminGroup` is optional (`argos-poc-admins` here; `null` for none). A named group comes from the
 same source as the entry group: Terraform creates it with the operator in it,
 or looks up the synced group. It gets the same three Resources, and Argos
 admits its members too. While enrollment is on, Argos team ownership follows
@@ -56,10 +56,10 @@ contributor with reviewer access, and owners promote others in team settings.
 - Twingate tenant/control plane: `https://argospoc.us2.dev.opstg.com`.
 - Native Client network: `argospoc.dev.opstg.com`.
 - Operator: `mattd@twingate.com`, tenant subject `VXNlcjo0NzE4`.
-- Admission group: `argos-poc-admins`, named by `twingate.entryGroup` in
-  `environment.json` and created by Terraform (`entryGroupSource`
-  `"terraform"`). Terraform keeps the operator in it; add and remove everyone
-  else in the Admin Console.
+- Entry group: `argos-poc-reviewers` (`twingate.entryGroup`); admin group:
+  `argos-poc-admins` (`twingate.adminGroup`). Terraform creates both
+  (`entryGroupSource` `"terraform"`) and keeps the operator in them; add and
+  remove everyone else in the Admin Console.
 - Human application: `https://app.argos-poc.internal`, Gateway-only.
 - Bearer-authenticated API: `https://api.argos-poc.internal`.
 - Signed screenshots:

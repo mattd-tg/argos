@@ -14,9 +14,9 @@
     "network": "argospoc",
     "host": "us2.dev.opstg.com",
     "apiKeyReference": "op://Employee/dvoowk5su2fks5fgfdbs42mece/credential",
-    "entryGroup": "argos-poc-admins",
+    "entryGroup": "argos-poc-reviewers",
     "entryGroupSource": "terraform",
-    "adminGroup": null,
+    "adminGroup": "argos-poc-admins",
     "ciServiceAccount": "argos-wif-demo-ci"
   },
   "operator": {
