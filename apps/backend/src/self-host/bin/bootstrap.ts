@@ -10,12 +10,15 @@ import { closeRedis } from "@/util/redis/client";
 // Stdout is the machine-readable operator protocol.
 logger.level = "silent";
 
-const APP_ORIGIN = "https://app.argos-poc.internal";
-
 function assertOperatorEnvironment(): void {
-  if (config.get("server.url") !== APP_ORIGIN) {
+  const serverUrl = new URL(config.get("server.url"));
+  if (
+    serverUrl.protocol !== "https:" ||
+    !serverUrl.hostname.startsWith("app.") ||
+    serverUrl.origin !== config.get("server.url")
+  ) {
     throw new Error(
-      "self-host operator requires SERVER_URL=https://app.argos-poc.internal",
+      "self-host operator requires SERVER_URL=https://app.<deployment domain>",
     );
   }
   if (config.get("pg.connection.database") !== "argos") {

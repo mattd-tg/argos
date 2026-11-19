@@ -7,15 +7,30 @@ secrets, and Argos-specific Twingate resources.
 
 ## Environment
 
-`environment.json` names everything that differs between deployments: the GCP
-project, project number, region and zone; the Twingate network, control-plane
+`environment.json` names everything that differs between deployments: the
+deployment's name, title and private domain; the GCP project, project number,
+region and zone; the Twingate network, control-plane
 host, API key reference and entry group; the operator; and the GitHub
 repository ID the deploy workflow runs from. Terraform, the operator scripts,
 the deploy workflow and the VM all read it (the VM through the
-`argos-poc-environment` metadata attribute), and bucket names derive from the
-project. To move the deployment, edit that file and `provision.env`, then
-provision fresh. The deployment's own names (`argos-poc-*`,
-`*.argos-poc.internal`, `10.87.40.10`) stay the same everywhere.
+`argos-poc-environment` metadata attribute). To move the deployment, edit that
+file and `provision.env`, then provision fresh.
+
+- `deployment.name` (`argos-poc` here, `argos` for a corp deployment) names
+  every GCP and Twingate object: the VM, network, disk, buckets
+  (`<project>-<name>-*`), service accounts, secrets, Workload Identity pool,
+  Remote Network, Connector and CA, plus the `deployment` label and the
+  operator's local state directory `~/.local/state/<name>`. Changing it on a
+  running deployment replaces all of them, which the plan validator refuses.
+- `deployment.title` (`Argos PoC`) is the display name of service accounts, the
+  identity pool and new root CAs.
+- `deployment.domain` (`argos-poc.internal`) holds the `app`, `api` and
+  `gateway` hostnames, their certificates, and the root CA's name constraint.
+  Release files carry `__DOMAIN__`, `__TWINGATE_NETWORK__` and
+  `__TWINGATE_HOST__`, which the deploy scripts fill in.
+- Names that exist only on the VM stay `argos-poc` in every deployment: the
+  metadata attributes, `/srv/argos-poc`, `/run/argos-poc`, the systemd units,
+  the Compose project and networks, and the data disk's device name.
 
 `twingate.entryGroupSource` says who owns the entry group:
 
@@ -247,10 +262,10 @@ and writes its state to `status/agent.json`, which the update polls for up to
 `journalctl -u argos-poc-release-agent` on the VM has the details. `install`
 still runs over SSH because it bootstraps the first account.
 
-The `Argos PoC deploy` workflow (`.github/workflows/argos-poc-deploy.yml`)
+The `Argos deploy` workflow (`.github/workflows/argos-deploy.yml`)
 builds the image on GitHub Actions and runs `deploy.mjs ci`, which ships it on
 the secret pins the VM already runs. Run it from main of `mattd-tg/argos`:
-`gh workflow run argos-poc-deploy.yml --ref main`. It signs in through the
+`gh workflow run argos-deploy.yml --ref main`. It signs in through the
 `argos-poc-github` Workload Identity pool, which admits only that repository's
 main branch and can only read and write objects in the releases bucket. CI
 skips the Twingate admission and VM checks that `update` makes, because it has

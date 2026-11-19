@@ -1,17 +1,17 @@
 resource "google_service_account" "runtime" {
-  account_id   = "argos-poc-runtime"
-  display_name = "Argos PoC runtime"
-  description  = "Runtime identity for the private Argos PoC VM."
+  account_id   = "${local.name}-runtime"
+  display_name = "${local.title} runtime"
+  description  = "Runtime identity for the private ${local.title} VM."
 }
 
 resource "google_service_account" "storage" {
-  account_id   = "argos-poc-storage"
-  display_name = "Argos PoC screenshot signer"
+  account_id   = "${local.name}-storage"
+  display_name = "${local.title} screenshot signer"
   description  = "HMAC signing identity with object access only on the Argos screenshot bucket."
 }
 
 resource "google_storage_bucket" "screenshots" {
-  name                        = "${local.project}-argos-poc-screenshots"
+  name                        = "${local.project}-${local.name}-screenshots"
   location                    = local.region
   uniform_bucket_level_access = true
   public_access_prevention    = "enforced"
@@ -37,7 +37,7 @@ resource "google_storage_bucket" "screenshots" {
   }
 
   cors {
-    origin          = ["https://app.argos-poc.internal"]
+    origin          = ["https://app.${local.domain}"]
     method          = ["GET", "HEAD", "POST", "PUT"]
     response_header = ["Content-Type", "Content-Disposition", "ETag", "Content-Range", "Accept-Ranges"]
     max_age_seconds = 3600
@@ -65,7 +65,7 @@ resource "google_storage_bucket" "screenshots" {
 # Artifact Registry instead once the runtime account can be granted read
 # access there (see README, "Images and installation").
 resource "google_storage_bucket" "releases" {
-  name                        = "${local.project}-argos-poc-releases"
+  name                        = "${local.project}-${local.name}-releases"
   location                    = local.region
   uniform_bucket_level_access = true
   public_access_prevention    = "enforced"
@@ -116,8 +116,8 @@ resource "google_storage_bucket_iam_member" "runtime_status" {
 # service account impersonation, so its principal is granted on the releases
 # bucket directly.
 resource "google_iam_workload_identity_pool" "github" {
-  workload_identity_pool_id = "argos-poc-github"
-  display_name              = "Argos PoC GitHub Actions"
+  workload_identity_pool_id = "${local.name}-github"
+  display_name              = "${local.title} GitHub Actions"
 }
 
 resource "google_iam_workload_identity_pool_provider" "github" {

@@ -175,7 +175,7 @@ services:
       edge:
         ipv4_address: 172.30.87.3
         aliases:
-          - gateway.argos-poc.internal
+          - gateway.__DOMAIN__
     mem_limit: 256m
     logging: *logging
 
@@ -190,7 +190,7 @@ services:
       edge:
         ipv4_address: 172.30.87.4
         aliases:
-          - app.argos-poc.internal
+          - app.__DOMAIN__
       backend:
     mem_limit: 64m
     logging: *logging
@@ -206,7 +206,7 @@ services:
       edge:
         ipv4_address: 172.30.87.5
         aliases:
-          - api.argos-poc.internal
+          - api.__DOMAIN__
       backend:
     mem_limit: 64m
     logging: *logging

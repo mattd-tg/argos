@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 ENVIRONMENT = json.loads(Path("/usr/local/lib/argos-poc/environment.json").read_text())
-BUCKET_NAME = f"{ENVIRONMENT['gcp']['project']}-argos-poc-releases"
+BUCKET_NAME = f"{ENVIRONMENT['gcp']['project']}-{ENVIRONMENT['deployment']['name']}-releases"
 BUCKET = f"gs://{BUCKET_NAME}"
 POINTER = f"{BUCKET}/current.json"
 STATUS = f"{BUCKET}/status/agent.json"

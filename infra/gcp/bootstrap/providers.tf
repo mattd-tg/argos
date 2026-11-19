@@ -6,7 +6,7 @@ provider "google" {
   user_project_override = true
 
   default_labels = {
-    deployment = "argos-poc"
+    deployment = local.name
     keep       = "true"
     owner      = local.environment.operator.label
   }

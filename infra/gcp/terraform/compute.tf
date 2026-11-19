@@ -1,11 +1,11 @@
 resource "google_compute_network" "network" {
-  name                    = "argos-poc-network"
+  name                    = "${local.name}-network"
   auto_create_subnetworks = false
   routing_mode            = "REGIONAL"
 }
 
 resource "google_compute_subnetwork" "subnet" {
-  name                     = "argos-poc-subnet"
+  name                     = "${local.name}-subnet"
   region                   = local.region
   network                  = google_compute_network.network.id
   ip_cidr_range            = "10.87.40.0/24"
@@ -13,13 +13,13 @@ resource "google_compute_subnetwork" "subnet" {
 }
 
 resource "google_compute_router" "router" {
-  name    = "argos-poc-router"
+  name    = "${local.name}-router"
   region  = local.region
   network = google_compute_network.network.id
 }
 
 resource "google_compute_router_nat" "nat" {
-  name                               = "argos-poc-nat"
+  name                               = "${local.name}-nat"
   router                             = google_compute_router.router.name
   region                             = google_compute_router.router.region
   nat_ip_allocate_option             = "AUTO_ONLY"
@@ -32,7 +32,7 @@ resource "google_compute_router_nat" "nat" {
 }
 
 resource "google_compute_firewall" "iap_ssh" {
-  name          = "argos-poc-iap-ssh"
+  name          = "${local.name}-iap-ssh"
   network       = google_compute_network.network.id
   direction     = "INGRESS"
   priority      = 1000
@@ -47,7 +47,7 @@ resource "google_compute_firewall" "iap_ssh" {
 }
 
 resource "google_compute_disk" "data" {
-  name = "argos-poc-data"
+  name = "${local.name}-data"
   type = "pd-balanced"
   zone = local.zone
   size = 50
@@ -58,7 +58,7 @@ resource "google_compute_disk" "data" {
 }
 
 resource "google_compute_instance" "vm" {
-  name         = "argos-poc"
+  name         = local.name
   zone         = local.zone
   machine_type = "e2-standard-2"
   depends_on = [
@@ -112,6 +112,7 @@ resource "google_compute_attached_disk" "data" {
   disk            = google_compute_disk.data.id
   instance        = google_compute_instance.vm.id
   zone            = local.zone
+  # initialize-host.sh mounts /dev/disk/by-id/google-argos-poc-data.
   device_name     = "argos-poc-data"
   mode            = "READ_WRITE"
   deletion_policy = "ABANDON"

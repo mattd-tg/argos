@@ -9,11 +9,14 @@ import {
   compose,
   deploymentOutputs,
   entry,
+  DOMAIN,
   ENVIRONMENT,
   envText,
   gcloud,
   gcloudJson,
+  HOSTS,
   jsonFile,
+  NAME,
   OPERATOR_EMAIL,
   OWNER_LABEL,
   privateWrite,
@@ -93,8 +96,8 @@ async function verifyAdmission(deployment) {
     throw new Error("Dedicated admission group drift");
   }
   for (const [address, id, type] of [
-    ["app.argos-poc.internal", deployment.app_resource_id, "WebAppResource"],
-    ["api.argos-poc.internal", deployment.api_resource_id, "NetworkResource"],
+    [HOSTS.app, deployment.app_resource_id, "WebAppResource"],
+    [HOSTS.api, deployment.api_resource_id, "NetworkResource"],
     [
       deployment.bucket_name + ".storage.googleapis.com",
       deployment.bucket_resource_id,
@@ -152,7 +155,7 @@ async function verifyVm(outputs) {
         deployment.network_id.split("/").at(-1),
     ) ||
     vm.networkInterfaces.some((item) => item.accessConfigs?.length) ||
-    vm.labels?.deployment !== "argos-poc" ||
+    vm.labels?.deployment !== NAME ||
     vm.labels?.keep !== "true" ||
     vm.labels?.owner !== OWNER_LABEL ||
     vm.serviceAccounts?.length !== 1 ||
@@ -304,7 +307,7 @@ async function uploadRelease(id, files) {
       "scp",
       "--recurse",
       local,
-      "argos-poc:" + upload,
+      NAME + ":" + upload,
       "--zone=" + ZONE,
       "--tunnel-through-iap",
     ],
@@ -389,7 +392,8 @@ async function releaseFiles(image, pins) {
   for (const name of RELEASE_FILES) {
     files[name] = (await readFile(join(ROOT, name), "utf8"))
       .replaceAll("__TWINGATE_NETWORK__", ENVIRONMENT.twingate.network)
-      .replaceAll("__TWINGATE_HOST__", ENVIRONMENT.twingate.host);
+      .replaceAll("__TWINGATE_HOST__", ENVIRONMENT.twingate.host)
+      .replaceAll("__DOMAIN__", DOMAIN);
   }
   return files;
 }

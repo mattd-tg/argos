@@ -1,6 +1,7 @@
 locals {
   environment = jsondecode(file("${path.module}/../environment.json"))
 
+  name    = local.environment.deployment.name
   project = local.environment.gcp.project
   region  = local.environment.gcp.region
   zone    = local.environment.gcp.zone

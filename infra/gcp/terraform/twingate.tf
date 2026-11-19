@@ -1,5 +1,5 @@
 resource "twingate_remote_network" "argos_poc" {
-  name = "argos-poc"
+  name = local.name
 
   lifecycle {
     precondition {
@@ -14,7 +14,7 @@ resource "twingate_remote_network" "argos_poc" {
 }
 
 resource "twingate_connector" "argos_poc" {
-  name              = "argos-poc-connector"
+  name              = "${local.name}-connector"
   remote_network_id = twingate_remote_network.argos_poc.id
 }
 
@@ -62,14 +62,14 @@ locals {
 # GitHub Actions uploads from mattd-tg/argos-wif-demo. Its Service Key is
 # created in the Admin Console so the secret never enters Terraform state.
 resource "twingate_service_account" "ci" {
-  name = "argos-wif-demo-ci"
+  name = local.environment.twingate.ciServiceAccount
 }
 
 # Not authoritative: Terraform manages only the grants below and leaves access
 # added in the Admin Console. deploy.mjs still rejects any extra group grant.
 resource "twingate_resource" "api" {
-  name                        = "api.argos-poc.internal"
-  address                     = "api.argos-poc.internal"
+  name                        = "api.${local.domain}"
+  address                     = "api.${local.domain}"
   remote_network_id           = twingate_remote_network.argos_poc.id
   routing_mode                = "THROUGH_TWINGATE"
   is_authoritative            = false
@@ -126,19 +126,19 @@ resource "twingate_resource" "storage" {
 }
 
 resource "twingate_x509_certificate_authority" "argos_poc" {
-  name        = "argos-poc-constrained-ca"
+  name        = "${local.name}-constrained-ca"
   certificate = local.gateway_ca_certificate
 }
 
 resource "twingate_gateway" "argos_poc" {
-  address           = "gateway.argos-poc.internal:8443"
+  address           = "gateway.${local.domain}:8443"
   remote_network_id = twingate_remote_network.argos_poc.id
   x509_ca_id        = twingate_x509_certificate_authority.argos_poc.id
 }
 
 resource "twingate_web_app_resource" "app_gateway" {
-  name              = "app.argos-poc.internal"
-  address           = "app.argos-poc.internal"
+  name              = "app.${local.domain}"
+  address           = "app.${local.domain}"
   gateway_id        = twingate_gateway.argos_poc.id
   remote_network_id = twingate_remote_network.argos_poc.id
 

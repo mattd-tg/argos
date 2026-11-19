@@ -2,9 +2,11 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import {
+  BUCKETS,
   gcloud,
   gcloudJson,
   OPERATOR_EMAIL,
+  NAME,
   OPERATOR_SUBJECT,
   PROJECT,
   PROJECT_NUMBER,
@@ -114,7 +116,7 @@ export async function checkProvisioningPermissions() {
     !missing.length,
     "Cloud mutation withheld; missing permissions: " + missing.join(", "),
   );
-  const bucketName = PROJECT + "-argos-poc-state";
+  const bucketName = BUCKETS.state;
   const bootstrap = stateResources(await ownedState("bootstrap"));
   assert(
     bootstrap.some(
@@ -235,7 +237,7 @@ export async function preflight(scope = "main") {
           : "id name";
     for (const node of await tenantNodes(connection, fields)) {
       const name = node.name ?? node.address;
-      if (name?.includes("argos-poc")) {
+      if (name?.includes(NAME)) {
         assert(
           hasOwned(type, node.id) ||
             hasOwned("twingate_web_app_resource", node.id),
@@ -246,11 +248,11 @@ export async function preflight(scope = "main") {
   }
   const bootstrap = stateResources(await ownedState("bootstrap"));
   for (const [bucketName, resources] of [
-    [PROJECT + "-argos-poc-state", bootstrap],
+    [BUCKETS.state, bootstrap],
     ...(scope === "main"
       ? [
-          [PROJECT + "-argos-poc-screenshots", owned],
-          [PROJECT + "-argos-poc-releases", owned],
+          [BUCKETS.screenshots, owned],
+          [BUCKETS.releases, owned],
         ]
       : []),
   ]) {
@@ -291,7 +293,7 @@ export async function preflight(scope = "main") {
       for (const resource of await gcloudJson(command)) {
         const name =
           resource.email?.split("@")[0] ?? resource.name?.split("/").at(-1);
-        if (name?.startsWith("argos-poc")) {
+        if (name?.startsWith(NAME)) {
           assert(
             hasOwned(type, resource.selfLink ?? resource.name) ||
               hasOwned(type, name),

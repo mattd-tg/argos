@@ -14,15 +14,17 @@ from pathlib import Path
 from typing import Any
 
 ENVIRONMENT = json.loads(Path("/usr/local/lib/argos-poc/environment.json").read_text())
+NAME = ENVIRONMENT["deployment"]["name"]
+DOMAIN = ENVIRONMENT["deployment"]["domain"]
 PROJECT_ID = ENVIRONMENT["gcp"]["project"]
 TWINGATE_NETWORK = ENVIRONMENT["twingate"]["network"]
 TENANT_HOST = f"{TWINGATE_NETWORK}.{ENVIRONMENT['twingate']['host']}"
 RUN_DIRECTORY = Path("/run/argos-poc")
 RELEASE_ROOT = Path("/srv/argos-poc/releases")
 VERSION_NAMES = {
-    "RUNTIME_SECRET_VERSION": "argos-poc-runtime",
-    "CONNECTOR_SECRET_VERSION": "argos-poc-connector",
-    "TLS_SECRET_VERSION": "argos-poc-tls",
+    "RUNTIME_SECRET_VERSION": f"{NAME}-runtime",
+    "CONNECTOR_SECRET_VERSION": f"{NAME}-connector",
+    "TLS_SECRET_VERSION": f"{NAME}-tls",
 }
 REQUIRED_RUNTIME_KEYS = {
     "NODE_ENV",
@@ -144,12 +146,12 @@ def require_string_map(
 def require_tls(value: Any) -> dict[str, str]:
     required = {"rootCert", "proxyCert", "proxyKey", "gatewayCert", "gatewayKey"}
     if not isinstance(value, dict) or set(value) != required:
-        raise LoaderError("secret argos-poc-tls has unexpected fields")
+        raise LoaderError(f"secret {NAME}-tls has unexpected fields")
     result: dict[str, str] = {}
     for key in required:
         item = value[key]
         if not isinstance(item, str) or not item.strip():
-            raise LoaderError("secret argos-poc-tls has invalid certificate material")
+            raise LoaderError(f"secret {NAME}-tls has invalid certificate material")
         result[key] = item
     return result
 
@@ -205,12 +207,12 @@ def main() -> int:
 
     connector = require_string_map(
         access_secret(VERSION_NAMES["CONNECTOR_SECRET_VERSION"], versions["CONNECTOR_SECRET_VERSION"]),
-        "argos-poc-connector",
+        f"{NAME}-connector",
         {"TWINGATE_ACCESS_TOKEN", "TWINGATE_REFRESH_TOKEN"},
     )
     runtime = require_string_map(
         access_secret(VERSION_NAMES["RUNTIME_SECRET_VERSION"], versions["RUNTIME_SECRET_VERSION"]),
-        "argos-poc-runtime",
+        f"{NAME}-runtime",
         REQUIRED_RUNTIME_KEYS,
         EMPTY_ALLOWED_RUNTIME_KEYS,
     )
@@ -219,14 +221,14 @@ def main() -> int:
         "TWINGATE_TENANT_HOST": TENANT_HOST,
         "TWINGATE_GATEWAY_AUDIENCE": TWINGATE_NETWORK,
         "TWINGATE_GATEWAY_JWKS_URL": f"https://{TENANT_HOST}/api/v1/jwk/ec",
-        "TWINGATE_GATEWAY_RESOURCE_ADDRESS": "app.argos-poc.internal",
+        "TWINGATE_GATEWAY_RESOURCE_ADDRESS": f"app.{DOMAIN}",
     }
     if any(runtime.get(key) != value for key, value in expected_gateway.items()):
         raise LoaderError("runtime must retain the owned Gateway identity boundary")
     tls = require_tls(access_secret(VERSION_NAMES["TLS_SECRET_VERSION"], versions["TLS_SECRET_VERSION"]))
     expected_storage = {
         "AWS_ENDPOINT_URL_S3": "https://storage.googleapis.com",
-        "AWS_SCREENSHOTS_BUCKET": f"{PROJECT_ID}-argos-poc-screenshots",
+        "AWS_SCREENSHOTS_BUCKET": f"{PROJECT_ID}-{NAME}-screenshots",
         "S3_FORCE_PATH_STYLE": "false",
         "S3_REGION": "auto",
         "AWS_REQUEST_CHECKSUM_CALCULATION": "WHEN_REQUIRED",

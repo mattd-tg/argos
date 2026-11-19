@@ -1,4 +1,4 @@
-name: Argos PoC deploy
+name: Argos deploy
 
 permissions: {}
 
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: argos-poc-deploy
+  group: argos-deploy
   cancel-in-progress: false
 
 jobs:
@@ -31,8 +31,10 @@ jobs:
           test "$(jq -r .github.repositoryId "$environment")" = "$GITHUB_REPOSITORY_ID"
           project=$(jq -r .gcp.project "$environment")
           number=$(jq -r .gcp.projectNumber "$environment")
+          name=$(jq -r .deployment.name "$environment")
           echo "project=$project" >> "$GITHUB_OUTPUT"
-          echo "provider=projects/$number/locations/global/workloadIdentityPools/argos-poc-github/providers/github" >> "$GITHUB_OUTPUT"
+          echo "state=$HOME/.local/state/$name" >> "$GITHUB_OUTPUT"
+          echo "provider=projects/$number/locations/global/workloadIdentityPools/$name-github/providers/github" >> "$GITHUB_OUTPUT"
 
       - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
         with:
@@ -55,12 +57,12 @@ jobs:
 
       - name: Build image archive
         run: |
-          docker build --platform linux/amd64 --target runtime --tag argos-poc:ci .
-          echo "IMAGE=$(docker image inspect argos-poc:ci --format '{{.Id}}')" >> "$GITHUB_ENV"
+          docker build --platform linux/amd64 --target runtime --tag argos:ci .
+          echo "IMAGE=$(docker image inspect argos:ci --format '{{.Id}}')" >> "$GITHUB_ENV"
           # deploy.mjs accepts only archives in owner-only protected state.
-          state="$HOME/.local/state/argos-poc"
+          state="${{ steps.environment.outputs.state }}"
           install -d -m 0700 "$state" "$state/images"
-          (umask 077 && docker save argos-poc:ci | gzip > "$state/images/argos.tar.gz")
+          (umask 077 && docker save argos:ci | gzip > "$state/images/argos.tar.gz")
 
       - name: Deploy
-        run: node infra/gcp/scripts/deploy.mjs ci --image "$IMAGE" --archive "$HOME/.local/state/argos-poc/images/argos.tar.gz"
+        run: node infra/gcp/scripts/deploy.mjs ci --image "$IMAGE" --archive "${{ steps.environment.outputs.state }}/images/argos.tar.gz"

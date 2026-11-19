@@ -6,6 +6,8 @@ import {
   BUCKETS,
   entry,
   GITHUB_REPOSITORY_ID,
+  HOSTS,
+  NAME,
   OWNER_LABEL,
   PRIVATE_IP,
   PROJECT,
@@ -73,7 +75,7 @@ const LABELED_TYPES = new Set([
 
 function validateLabels(labels, address) {
   if (
-    labels?.deployment !== "argos-poc" ||
+    labels?.deployment !== NAME ||
     labels?.keep !== "true" ||
     labels?.owner !== OWNER_LABEL
   ) {
@@ -126,7 +128,7 @@ function validateBucket(values, scope, filterEnabled) {
         filter.public_network_source?.length ||
         filter.vpc_network_sources?.length !== 1 ||
         source?.network !==
-          `projects/${PROJECT}/global/networks/argos-poc-network` ||
+          `projects/${PROJECT}/global/networks/${NAME}-network` ||
         JSON.stringify(source.allowed_ip_cidr_ranges) !==
           JSON.stringify([PRIVATE_IP + "/32"])
       : values.ip_filter?.length
@@ -136,8 +138,7 @@ function validateBucket(values, scope, filterEnabled) {
   if (
     values.soft_delete_policy?.[0]?.retention_duration_seconds !== 604800 ||
     values.cors?.length !== 1 ||
-    JSON.stringify(cors?.origin) !==
-      JSON.stringify(["https://app.argos-poc.internal"]) ||
+    JSON.stringify(cors?.origin) !== JSON.stringify(["https://" + HOSTS.app]) ||
     JSON.stringify(cors?.method) !==
       JSON.stringify(["GET", "HEAD", "POST", "PUT"]) ||
     JSON.stringify(cors?.response_header) !==
@@ -155,7 +156,7 @@ function validateBucket(values, scope, filterEnabled) {
 }
 
 const GITHUB_CONDITION = `assertion.repository_id == "${GITHUB_REPOSITORY_ID}" && assertion.ref == "refs/heads/main"`;
-const CI_MEMBER = `principalSet://iam.googleapis.com/projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/argos-poc-github/attribute.repository_id/${GITHUB_REPOSITORY_ID}`;
+const CI_MEMBER = `principalSet://iam.googleapis.com/projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${NAME}-github/attribute.repository_id/${GITHUB_REPOSITORY_ID}`;
 const STATUS_CONDITION = `resource.name.startsWith("projects/_/buckets/${RELEASES_BUCKET}/objects/status/")`;
 
 function isReleasesGrant({ role, member, condition }) {
@@ -171,8 +172,8 @@ function isReleasesGrant({ role, member, condition }) {
   );
 }
 
-const RUNTIME_MEMBER = `serviceAccount:argos-poc-runtime@${PROJECT}.iam.gserviceaccount.com`;
-const STORAGE_MEMBER = `serviceAccount:argos-poc-storage@${PROJECT}.iam.gserviceaccount.com`;
+const RUNTIME_MEMBER = `serviceAccount:${NAME}-runtime@${PROJECT}.iam.gserviceaccount.com`;
+const STORAGE_MEMBER = `serviceAccount:${NAME}-storage@${PROJECT}.iam.gserviceaccount.com`;
 
 function validateScreenshotPolicy(plan) {
   const created = plan.resource_changes?.some(
@@ -271,7 +272,7 @@ export function validatePlan(plan, scope) {
     }
     if (change.type === "google_compute_instance" && after) {
       if (
-        after.name !== "argos-poc" ||
+        after.name !== NAME ||
         !after.machine_type.endsWith("e2-standard-2")
       ) {
         throw new Error("Unexpected VM name or machine type");

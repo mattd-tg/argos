@@ -9,8 +9,11 @@ import { dirname, join, relative, resolve } from "node:path";
 
 import {
   deploymentOutputs,
+  DOMAIN,
   entry,
+  ENVIRONMENT,
   gcloud,
+  HOSTS,
   jsonFile,
   privateDir,
   privateWrite,
@@ -21,7 +24,6 @@ import {
 } from "./lib.mjs";
 
 const PKI = join(STATE, "pki");
-const DOMAIN = "argos-poc.internal";
 const ROOT_NAME_CONSTRAINTS = `permitted;DNS:${DOMAIN},excluded;IP:0.0.0.0/0.0.0.0,excluded;IP:::/::`;
 const hex = (size = 32) => randomBytes(size).toString("hex");
 async function exists(path) {
@@ -81,7 +83,7 @@ export async function ensurePki({
         "-out",
         rootCert,
         "-subj",
-        "/CN=Argos PoC Root CA",
+        "/CN=" + ENVIRONMENT.deployment.title + " Root CA",
         "-addext",
         "basicConstraints=critical,CA:TRUE,pathlen:0",
         "-addext",
@@ -367,10 +369,10 @@ export async function initializeSecrets(hmacFile) {
         REDIS_URL: "redis://redis:6379",
         AMQP_URL: "amqp://argos:" + rabbitPassword + "@rabbitmq:5672",
         AMQP_QUEUE_PREFIX: "argos-poc",
-        SERVER_URL: "https://app.argos-poc.internal",
-        API_BASE_URL: "https://api.argos-poc.internal",
+        SERVER_URL: "https://" + HOSTS.app,
+        API_BASE_URL: "https://" + HOSTS.api,
         SESSION_DOMAIN: "",
-        WEBAUTHN_RP_ID: "app.argos-poc.internal",
+        WEBAUTHN_RP_ID: HOSTS.app,
         ASSETS_BASE_URL: "",
         WILDCARD_DOMAINS: "",
         S3_PUBLIC_IMAGE_BASE_URL: "",
@@ -396,7 +398,7 @@ export async function initializeSecrets(hmacFile) {
         TWINGATE_TENANT_HOST: new URL(TENANT).hostname,
         TWINGATE_GATEWAY_AUDIENCE: new URL(TENANT).hostname.split(".")[0],
         TWINGATE_GATEWAY_JWKS_URL: TENANT + "/api/v1/jwk/ec",
-        TWINGATE_GATEWAY_RESOURCE_ADDRESS: "app.argos-poc.internal",
+        TWINGATE_GATEWAY_RESOURCE_ADDRESS: HOSTS.app,
         TWINGATE_GATEWAY_ENTRY_GROUP: identity.entry_group,
         TWINGATE_GATEWAY_ENROLLMENT_ENABLED: "false",
       },
@@ -525,8 +527,8 @@ const TLS_FIELDS = [
   "gatewayKey",
 ];
 const TLS_HOSTS = {
-  proxy: ["app.argos-poc.internal", "api.argos-poc.internal"],
-  gateway: ["gateway.argos-poc.internal", "app.argos-poc.internal"],
+  proxy: [HOSTS.app, HOSTS.api],
+  gateway: [HOSTS.gateway, HOSTS.app],
 };
 const TLS_RENEWAL_WINDOW = 604800_000;
 

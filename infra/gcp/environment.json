@@ -1,4 +1,9 @@
 {
+  "deployment": {
+    "name": "argos-poc",
+    "title": "Argos PoC",
+    "domain": "argos-poc.internal"
+  },
   "gcp": {
     "project": "twingate-playground",
     "projectNumber": "417269620845",
@@ -10,7 +15,8 @@
     "host": "us2.dev.opstg.com",
     "apiKeyReference": "op://Employee/dvoowk5su2fks5fgfdbs42mece/credential",
     "entryGroup": "argos-poc-admins",
-    "entryGroupSource": "terraform"
+    "entryGroupSource": "terraform",
+    "ciServiceAccount": "argos-wif-demo-ci"
   },
   "operator": {
     "email": "mattd@twingate.com",

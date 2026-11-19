@@ -1,5 +1,5 @@
 resource "google_storage_bucket" "state" {
-  name                        = "${local.project}-argos-poc-state"
+  name                        = "${local.project}-${local.name}-state"
   location                    = local.region
   uniform_bucket_level_access = true
   public_access_prevention    = "enforced"

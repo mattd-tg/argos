@@ -1,6 +1,10 @@
 locals {
   environment = jsondecode(file("${path.module}/../environment.json"))
 
+  name   = local.environment.deployment.name
+  title  = local.environment.deployment.title
+  domain = local.environment.deployment.domain
+
   project        = local.environment.gcp.project
   project_number = local.environment.gcp.projectNumber
   region         = local.environment.gcp.region
@@ -15,15 +19,15 @@ locals {
   entry_group_source = local.environment.twingate.entryGroupSource
 
   labels = {
-    deployment = "argos-poc"
+    deployment = local.name
     keep       = "true"
     owner      = local.environment.operator.label
   }
 
   secret_ids = {
-    runtime   = "argos-poc-runtime"
-    connector = "argos-poc-connector"
-    tls       = "argos-poc-tls"
+    runtime   = "${local.name}-runtime"
+    connector = "${local.name}-connector"
+    tls       = "${local.name}-tls"
   }
 
   gateway_ca_certificate = file(var.ca_certificate_path)

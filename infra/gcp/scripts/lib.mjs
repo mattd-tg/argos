@@ -9,6 +9,13 @@ export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export const ENVIRONMENT = JSON.parse(
   readFileSync(join(ROOT, "environment.json"), "utf8"),
 );
+export const NAME = ENVIRONMENT.deployment.name;
+export const DOMAIN = ENVIRONMENT.deployment.domain;
+export const HOSTS = {
+  app: "app." + DOMAIN,
+  api: "api." + DOMAIN,
+  gateway: "gateway." + DOMAIN,
+};
 export const PROJECT = ENVIRONMENT.gcp.project;
 export const PROJECT_NUMBER = ENVIRONMENT.gcp.projectNumber;
 export const REGION = ENVIRONMENT.gcp.region;
@@ -22,11 +29,11 @@ export const OPERATOR_SUBJECT = ENVIRONMENT.operator.subject;
 export const OWNER_LABEL = ENVIRONMENT.operator.label;
 export const GITHUB_REPOSITORY_ID = ENVIRONMENT.github.repositoryId;
 export const BUCKETS = {
-  state: PROJECT + "-argos-poc-state",
-  screenshots: PROJECT + "-argos-poc-screenshots",
-  releases: PROJECT + "-argos-poc-releases",
+  state: `${PROJECT}-${NAME}-state`,
+  screenshots: `${PROJECT}-${NAME}-screenshots`,
+  releases: `${PROJECT}-${NAME}-releases`,
 };
-export const STATE = join(homedir(), ".local/state/argos-poc");
+export const STATE = join(homedir(), ".local/state", NAME);
 const REPO = resolve(ROOT, "../..");
 process.umask(0o077);
 
@@ -152,7 +159,7 @@ export async function deploymentOutputs() {
   if (
     outputs.project_id !== PROJECT ||
     outputs.zone !== ZONE ||
-    outputs.instance_name !== "argos-poc" ||
+    outputs.instance_name !== NAME ||
     outputs.storage_ip_filter_enabled !== true ||
     deployment?.private_ip !== PRIVATE_IP ||
     deployment?.operator_subject !== OPERATOR_SUBJECT ||
@@ -344,7 +351,7 @@ export async function ssh(command, options = {}) {
     [
       "compute",
       "ssh",
-      "argos-poc",
+      NAME,
       `--zone=${ZONE}`,
       "--tunnel-through-iap",
       "--command",
