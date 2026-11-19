@@ -237,7 +237,7 @@ export async function syncGatewayTeamOwnership(
     await TeamUser.query()
       .insert({ teamId, userId, userLevel: "owner" })
       .onConflict(["teamId", "userId"])
-      .merge(["userLevel"]);
+      .merge(["userLevel", "updatedAt"]);
   } else if (!owner && isOwner) {
     await TeamUser.query()
       .patch({ userLevel: "contributor" })
