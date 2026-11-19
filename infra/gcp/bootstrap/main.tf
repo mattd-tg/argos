@@ -1,9 +1,10 @@
 resource "google_storage_bucket" "state" {
-  name                        = "twingate-playground-argos-poc-state"
-  location                    = "us-east4"
+  name                        = "${local.project}-argos-poc-state"
+  location                    = local.region
   uniform_bucket_level_access = true
   public_access_prevention    = "enforced"
   force_destroy               = false
+  depends_on                  = [google_project_service.required]
 
   versioning {
     enabled = true

@@ -8,8 +8,8 @@ provider "google" {
 }
 
 provider "twingate" {
-  network = "argospoc"
-  url     = "us2.dev.opstg.com"
+  network = local.environment.twingate.network
+  url     = local.environment.twingate.host
 
   cache = {
     groups_enabled   = false

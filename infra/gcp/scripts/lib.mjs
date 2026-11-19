@@ -1,20 +1,32 @@
 import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const PROJECT = "twingate-playground";
-export const PROJECT_NUMBER = "417269620845";
-const REGION = "us-east4";
-export const ZONE = REGION + "-a";
-const PRIVATE_IP = "10.87.40.10";
-export const TENANT = "https://argospoc.us2.dev.opstg.com";
-const API_KEY_REFERENCE = "op://Employee/dvoowk5su2fks5fgfdbs42mece/credential";
-export const OPERATOR_EMAIL = "mattd@twingate.com";
-export const OPERATOR_SUBJECT = "VXNlcjo0NzE4";
-export const STATE = join(homedir(), ".local/state/argos-poc");
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+export const ENVIRONMENT = JSON.parse(
+  readFileSync(join(ROOT, "environment.json"), "utf8"),
+);
+export const PROJECT = ENVIRONMENT.gcp.project;
+export const PROJECT_NUMBER = ENVIRONMENT.gcp.projectNumber;
+export const REGION = ENVIRONMENT.gcp.region;
+export const ZONE = ENVIRONMENT.gcp.zone;
+export const PRIVATE_IP = "10.87.40.10";
+export const TENANT_HOST = `${ENVIRONMENT.twingate.network}.${ENVIRONMENT.twingate.host}`;
+export const TENANT = "https://" + TENANT_HOST;
+const API_KEY_REFERENCE = ENVIRONMENT.twingate.apiKeyReference;
+export const OPERATOR_EMAIL = ENVIRONMENT.operator.email;
+export const OPERATOR_SUBJECT = ENVIRONMENT.operator.subject;
+export const OWNER_LABEL = ENVIRONMENT.operator.label;
+export const GITHUB_REPOSITORY_ID = ENVIRONMENT.github.repositoryId;
+export const BUCKETS = {
+  state: PROJECT + "-argos-poc-state",
+  screenshots: PROJECT + "-argos-poc-screenshots",
+  releases: PROJECT + "-argos-poc-releases",
+};
+export const STATE = join(homedir(), ".local/state/argos-poc");
 const REPO = resolve(ROOT, "../..");
 process.umask(0o077);
 
@@ -144,8 +156,10 @@ export async function deploymentOutputs() {
     outputs.storage_ip_filter_enabled !== true ||
     deployment?.private_ip !== PRIVATE_IP ||
     deployment?.operator_subject !== OPERATOR_SUBJECT ||
-    deployment?.bucket_name !== PROJECT + "-argos-poc-screenshots" ||
-    deployment?.releases_bucket !== PROJECT + "-argos-poc-releases" ||
+    deployment?.bucket_name !== BUCKETS.screenshots ||
+    deployment?.releases_bucket !== BUCKETS.releases ||
+    deployment.entry_group !== ENVIRONMENT.twingate.entryGroup ||
+    deployment.entry_group_source !== ENVIRONMENT.twingate.entryGroupSource ||
     !deployment.vm_id ||
     !deployment.network_id ||
     !deployment.entry_group ||
@@ -182,7 +196,9 @@ export async function verifyStorageBoundary(outputs) {
     "url='https://storage.googleapis.com/storage/v1/b/'+" +
       JSON.stringify(deployment.bucket_name),
     "def get(url):",
-    "    request=urllib.request.Request(url,headers={'Authorization':'Bearer '+token,'x-goog-user-project':'twingate-playground'})",
+    "    request=urllib.request.Request(url,headers={'Authorization':'Bearer '+token,'x-goog-user-project':'" +
+      PROJECT +
+      "'})",
     "    with urllib.request.urlopen(request,timeout=30) as response: return json.load(response)",
     "try:",
     "    bucket=get(url)",

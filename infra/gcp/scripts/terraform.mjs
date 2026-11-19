@@ -3,9 +3,16 @@ import { join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 
 import {
+  BUCKETS,
   entry,
+  GITHUB_REPOSITORY_ID,
+  OWNER_LABEL,
+  PRIVATE_IP,
+  PROJECT,
+  PROJECT_NUMBER,
   privateDir,
   privateWrite,
+  REGION,
   ROOT,
   run,
   STATE,
@@ -40,6 +47,7 @@ const APPROVED_RESOURCES = new Set([
   "twingate_connector.argos_poc",
   "twingate_connector_tokens.argos_poc",
   "twingate_group.admins",
+  "data.twingate_groups.entry",
   "twingate_service_account.ci",
   "twingate_resource.storage",
   "twingate_resource.api",
@@ -67,7 +75,7 @@ function validateLabels(labels, address) {
   if (
     labels?.deployment !== "argos-poc" ||
     labels?.keep !== "true" ||
-    labels?.owner !== "matt-demichele"
+    labels?.owner !== OWNER_LABEL
   ) {
     throw new Error("Missing owned-resource labels: " + address);
   }
@@ -85,17 +93,17 @@ function validateResourceLabels(type, values, address) {
   }
 }
 
-const RELEASES_BUCKET = "twingate-playground-argos-poc-releases";
+const RELEASES_BUCKET = BUCKETS.releases;
 
 function validateBucket(values, scope, filterEnabled) {
   const names =
     scope === "bootstrap"
-      ? ["twingate-playground-argos-poc-state"]
-      : ["twingate-playground-argos-poc-screenshots", RELEASES_BUCKET];
+      ? [BUCKETS.state]
+      : [BUCKETS.screenshots, RELEASES_BUCKET];
   const name = values.name;
   if (
     !names.includes(name) ||
-    values.location?.toUpperCase() !== "US-EAST4" ||
+    values.location?.toUpperCase() !== REGION.toUpperCase() ||
     values.uniform_bucket_level_access !== true ||
     values.public_access_prevention !== "enforced" ||
     values.force_destroy !== false ||
@@ -118,9 +126,9 @@ function validateBucket(values, scope, filterEnabled) {
         filter.public_network_source?.length ||
         filter.vpc_network_sources?.length !== 1 ||
         source?.network !==
-          "projects/twingate-playground/global/networks/argos-poc-network" ||
+          `projects/${PROJECT}/global/networks/argos-poc-network` ||
         JSON.stringify(source.allowed_ip_cidr_ranges) !==
-          JSON.stringify(["10.87.40.10/32"])
+          JSON.stringify([PRIVATE_IP + "/32"])
       : values.ip_filter?.length
   ) {
     throw new Error("Screenshot bucket exceeds its exact VPC /32 boundary");
@@ -146,10 +154,8 @@ function validateBucket(values, scope, filterEnabled) {
   }
 }
 
-const GITHUB_CONDITION =
-  'assertion.repository_id == "1451923766" && assertion.ref == "refs/heads/main"';
-const CI_MEMBER =
-  "principalSet://iam.googleapis.com/projects/417269620845/locations/global/workloadIdentityPools/argos-poc-github/attribute.repository_id/1451923766";
+const GITHUB_CONDITION = `assertion.repository_id == "${GITHUB_REPOSITORY_ID}" && assertion.ref == "refs/heads/main"`;
+const CI_MEMBER = `principalSet://iam.googleapis.com/projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/argos-poc-github/attribute.repository_id/${GITHUB_REPOSITORY_ID}`;
 const STATUS_CONDITION = `resource.name.startsWith("projects/_/buckets/${RELEASES_BUCKET}/objects/status/")`;
 
 function isReleasesGrant({ role, member, condition }) {
@@ -165,10 +171,8 @@ function isReleasesGrant({ role, member, condition }) {
   );
 }
 
-const RUNTIME_MEMBER =
-  "serviceAccount:argos-poc-runtime@twingate-playground.iam.gserviceaccount.com";
-const STORAGE_MEMBER =
-  "serviceAccount:argos-poc-storage@twingate-playground.iam.gserviceaccount.com";
+const RUNTIME_MEMBER = `serviceAccount:argos-poc-runtime@${PROJECT}.iam.gserviceaccount.com`;
+const STORAGE_MEMBER = `serviceAccount:argos-poc-storage@${PROJECT}.iam.gserviceaccount.com`;
 
 function validateScreenshotPolicy(plan) {
   const created = plan.resource_changes?.some(
@@ -243,8 +247,16 @@ export function validatePlan(plan, scope) {
     }
     if (scope === "bootstrap") {
       if (
-        change.type !== "google_storage_bucket" ||
-        (after && after.name !== "twingate-playground-argos-poc-state")
+        !(
+          change.type === "google_storage_bucket" &&
+          (!after || after.name === BUCKETS.state)
+        ) &&
+        !(
+          change.address.startsWith("google_project_service.required[") &&
+          actions.every((action) => action === "create") &&
+          after.disable_on_destroy === false &&
+          after.disable_dependent_services === false
+        )
       ) {
         throw new Error(`Unexpected bootstrap change: ${change.address}`);
       }
@@ -267,7 +279,7 @@ export function validatePlan(plan, scope) {
       if (
         after.network_interface?.length !== 1 ||
         after.network_interface[0].access_config?.length ||
-        after.network_interface[0].network_ip !== "10.87.40.10"
+        after.network_interface[0].network_ip !== PRIVATE_IP
       ) {
         throw new Error("VM network violates private-address boundary");
       }
@@ -454,7 +466,7 @@ if (process.argv[1]?.endsWith("/terraform.mjs")) {
           ...(scope === "bootstrap"
             ? [`-backend-config=path=${join(STATE, "bootstrap.tfstate")}`]
             : [
-                "-backend-config=bucket=twingate-playground-argos-poc-state",
+                `-backend-config=bucket=${BUCKETS.state}`,
                 "-backend-config=prefix=terraform",
               ]),
           ...args,

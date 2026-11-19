@@ -13,7 +13,10 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-PROJECT_ID = "twingate-playground"
+ENVIRONMENT = json.loads(Path("/usr/local/lib/argos-poc/environment.json").read_text())
+PROJECT_ID = ENVIRONMENT["gcp"]["project"]
+TWINGATE_NETWORK = ENVIRONMENT["twingate"]["network"]
+TENANT_HOST = f"{TWINGATE_NETWORK}.{ENVIRONMENT['twingate']['host']}"
 RUN_DIRECTORY = Path("/run/argos-poc")
 RELEASE_ROOT = Path("/srv/argos-poc/releases")
 VERSION_NAMES = {
@@ -213,9 +216,9 @@ def main() -> int:
     )
     expected_gateway = {
         "TWINGATE_GATEWAY_ENABLED": "true",
-        "TWINGATE_TENANT_HOST": "argospoc.us2.dev.opstg.com",
-        "TWINGATE_GATEWAY_AUDIENCE": "argospoc",
-        "TWINGATE_GATEWAY_JWKS_URL": "https://argospoc.us2.dev.opstg.com/api/v1/jwk/ec",
+        "TWINGATE_TENANT_HOST": TENANT_HOST,
+        "TWINGATE_GATEWAY_AUDIENCE": TWINGATE_NETWORK,
+        "TWINGATE_GATEWAY_JWKS_URL": f"https://{TENANT_HOST}/api/v1/jwk/ec",
         "TWINGATE_GATEWAY_RESOURCE_ADDRESS": "app.argos-poc.internal",
     }
     if any(runtime.get(key) != value for key, value in expected_gateway.items()):
@@ -223,7 +226,7 @@ def main() -> int:
     tls = require_tls(access_secret(VERSION_NAMES["TLS_SECRET_VERSION"], versions["TLS_SECRET_VERSION"]))
     expected_storage = {
         "AWS_ENDPOINT_URL_S3": "https://storage.googleapis.com",
-        "AWS_SCREENSHOTS_BUCKET": "twingate-playground-argos-poc-screenshots",
+        "AWS_SCREENSHOTS_BUCKET": f"{PROJECT_ID}-argos-poc-screenshots",
         "S3_FORCE_PATH_STYLE": "false",
         "S3_REGION": "auto",
         "AWS_REQUEST_CHECKSUM_CALCULATION": "WHEN_REQUIRED",

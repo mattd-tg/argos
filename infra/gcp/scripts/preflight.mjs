@@ -11,6 +11,7 @@ import {
   ROOT,
   run,
   STATE,
+  TENANT_HOST,
   tenantNodes,
   tenantQuery,
 } from "./lib.mjs";
@@ -87,6 +88,7 @@ export async function checkProvisioningPermissions() {
     "secretmanager.secrets.create",
     "storage.buckets.create",
     "iam.workloadIdentityPools.create",
+    "serviceusage.services.enable",
   ];
   const response = await fetch(
     "https://cloudresourcemanager.googleapis.com/v1/projects/" +
@@ -304,6 +306,8 @@ export async function preflight(scope = "main") {
       scope +
       "; project " +
       PROJECT_NUMBER +
-      "; tenant argospoc; native Client unchanged.",
+      "; tenant " +
+      TENANT_HOST +
+      "; native Client unchanged.",
   );
 }

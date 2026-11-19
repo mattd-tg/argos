@@ -1,13 +1,13 @@
 provider "google" {
-  project               = "twingate-playground"
-  region                = "us-east4"
-  zone                  = "us-east4-a"
-  billing_project       = "twingate-playground"
+  project               = local.project
+  region                = local.region
+  zone                  = local.zone
+  billing_project       = local.project
   user_project_override = true
 
   default_labels = {
     deployment = "argos-poc"
     keep       = "true"
-    owner      = "matt-demichele"
+    owner      = local.environment.operator.label
   }
 }

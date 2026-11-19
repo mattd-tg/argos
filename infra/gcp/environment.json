@@ -1,0 +1,23 @@
+{
+  "gcp": {
+    "project": "twingate-playground",
+    "projectNumber": "417269620845",
+    "region": "us-east4",
+    "zone": "us-east4-a"
+  },
+  "twingate": {
+    "network": "argospoc",
+    "host": "us2.dev.opstg.com",
+    "apiKeyReference": "op://Employee/dvoowk5su2fks5fgfdbs42mece/credential",
+    "entryGroup": "argos-poc-admins",
+    "entryGroupSource": "terraform"
+  },
+  "operator": {
+    "email": "mattd@twingate.com",
+    "subject": "VXNlcjo0NzE4",
+    "label": "matt-demichele"
+  },
+  "github": {
+    "repositoryId": "1451923766"
+  }
+}

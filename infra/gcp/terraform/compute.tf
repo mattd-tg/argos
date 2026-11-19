@@ -93,6 +93,7 @@ resource "google_compute_instance" "vm" {
     argos-poc-prepare-unit  = base64encode(file("${path.module}/../systemd/argos-poc-prepare.service"))
     argos-poc-release-agent = base64encode(file("${path.module}/../scripts/release-agent.py"))
     argos-poc-agent-unit    = base64encode(file("${path.module}/../systemd/argos-poc-release-agent.service"))
+    argos-poc-environment   = base64encode(file("${path.module}/../environment.json"))
     startup-script          = file("${path.module}/../scripts/initialize-host.sh")
   }
 

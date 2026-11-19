@@ -14,7 +14,9 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
-BUCKET = "gs://twingate-playground-argos-poc-releases"
+ENVIRONMENT = json.loads(Path("/usr/local/lib/argos-poc/environment.json").read_text())
+BUCKET_NAME = f"{ENVIRONMENT['gcp']['project']}-argos-poc-releases"
+BUCKET = f"gs://{BUCKET_NAME}"
 POINTER = f"{BUCKET}/current.json"
 STATUS = f"{BUCKET}/status/agent.json"
 POLL_SECONDS = 30
@@ -26,6 +28,7 @@ HOST_ATTRIBUTES = (
     "argos-poc-prepare-unit",
     "argos-poc-release-agent",
     "argos-poc-agent-unit",
+    "argos-poc-environment",
 )
 HOST_DIGEST = Path("/var/lib/argos-poc/host-metadata.sha256")
 ROOT = Path("/srv/argos-poc")
@@ -37,7 +40,7 @@ LOAD_SECRETS = "/usr/local/lib/argos-poc/load-secrets.py"
 RELEASE_ID = re.compile(r"^[0-9]+-[a-f0-9]+$")
 SHA256 = re.compile(r"^[a-f0-9]{64}$")
 IMAGE = re.compile(r"^sha256:[a-f0-9]{64}$")
-OBJECT = re.compile(r"^gs://twingate-playground-argos-poc-releases/[a-z0-9-]+/[a-z0-9.-]+$")
+OBJECT = re.compile(rf"^gs://{re.escape(BUCKET_NAME)}/[a-z0-9-]+/[a-z0-9.-]+$")
 RELEASE_FILES = {
     "compose.yaml",
     "compose.connector.yaml",

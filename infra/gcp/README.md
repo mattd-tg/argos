@@ -5,13 +5,36 @@ Argos runs in project `twingate-playground` (`417269620845`), in
 VPC, subnet, router/NAT, private VM, data disk, private storage, deployment
 secrets, and Argos-specific Twingate resources.
 
+## Environment
+
+`environment.json` names everything that differs between deployments: the GCP
+project, project number, region and zone; the Twingate network, control-plane
+host, API key reference and entry group; the operator; and the GitHub
+repository ID the deploy workflow runs from. Terraform, the operator scripts,
+the deploy workflow and the VM all read it (the VM through the
+`argos-poc-environment` metadata attribute), and bucket names derive from the
+project. To move the deployment, edit that file and `provision.env`, then
+provision fresh. The deployment's own names (`argos-poc-*`,
+`*.argos-poc.internal`, `10.87.40.10`) stay the same everywhere.
+
+`twingate.entryGroupSource` says who owns the entry group:
+
+- `"terraform"`: Terraform creates the group and keeps the operator in it.
+  Everyone else is added and removed in the Admin Console. Use it for a tenant
+  without an identity provider.
+- `"idp"`: the group is synced from the identity provider. Terraform looks it
+  up by name, fails the plan unless exactly one synced group matches, and only
+  grants it the Resources. Membership belongs to the IdP, so deploys no longer
+  require the operator to be a member.
+
 ## Identity and private access
 
 - Twingate tenant/control plane: `https://argospoc.us2.dev.opstg.com`.
 - Native Client network: `argospoc.dev.opstg.com`.
 - Operator: `mattd@twingate.com`, tenant subject `VXNlcjo0NzE4`.
-- Admission group: `argos-poc-admins`, named by the Terraform variable
-  `entry_group`. Terraform keeps the operator in it; add and remove everyone
+- Admission group: `argos-poc-admins`, named by `twingate.entryGroup` in
+  `environment.json` and created by Terraform (`entryGroupSource`
+  `"terraform"`). Terraform keeps the operator in it; add and remove everyone
   else in the Admin Console.
 - Human application: `https://app.argos-poc.internal`, Gateway-only.
 - Bearer-authenticated API: `https://api.argos-poc.internal`.
@@ -122,7 +145,8 @@ op run --env-file infra/gcp/provision.env -- node infra/gcp/scripts/terraform.mj
 op run --env-file infra/gcp/provision.env -- node infra/gcp/scripts/terraform.mjs main apply -var=storage_ip_filter_enabled=false
 ```
 
-The first main apply creates an **empty IAM-private bucket** and private VM.
+The bootstrap apply turns on the GCP APIs the deployment calls and never turns
+them off, so it is safe in a shared project. The first main apply creates an **empty IAM-private bucket** and private VM.
 Do not create HMAC credentials, install Argos, or produce signed capabilities
 yet. Wait for host initialization and the mounted data disk, start the operator
 tunnel, then run the complete filtered apply:
@@ -204,7 +228,7 @@ registry.
 Stage a protected runtime patch from the active numeric version with
 `secrets.mjs stage-runtime`, then run `deploy.mjs update` with the same
 image/version arguments as installation. Every staged runtime takes Argos's
-entry group from Terraform's `entry_group` output, and an update refuses a
+entry group from Terraform's `entry_group` output (`twingate.entryGroup`), and an update refuses a
 runtime whose group differs from it.
 
 The VM installs the secret loader, release agent and their units from instance
@@ -236,8 +260,10 @@ secrets and TLS with `update` from the operator laptop.
 To change the admission group, run these back to back: between steps 1 and 3,
 Argos still expects the old name and rejects everyone.
 
-1. Change `entry_group` in `terraform/variables.tf` and apply Terraform. The
-   group keeps its ID, members, and Resource access.
+1. Change `twingate.entryGroup` in `environment.json` and apply Terraform.
+   With `entryGroupSource` `"terraform"`, the group keeps its ID, members, and
+   Resource access; with `"idp"`, Terraform grants the Resources to the newly
+   named synced group instead.
 2. Stage a runtime with the new name:
    `node infra/gcp/scripts/secrets.mjs stage-runtime --from-version <active>`.
 3. Deploy the returned version with `deploy.mjs update`.

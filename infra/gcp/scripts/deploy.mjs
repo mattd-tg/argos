@@ -9,17 +9,20 @@ import {
   compose,
   deploymentOutputs,
   entry,
+  ENVIRONMENT,
   envText,
   gcloud,
   gcloudJson,
   jsonFile,
   OPERATOR_EMAIL,
+  OWNER_LABEL,
   privateWrite,
   quote,
   ROOT,
   run,
   ssh,
   STATE,
+  BUCKETS,
   tenantNodes,
   verifyStorageBoundary,
   ZONE,
@@ -49,7 +52,7 @@ const RELEASE_FILES = [
   "nginx/app.conf",
 ];
 const LOAD_SECRETS = "/usr/local/lib/argos-poc/load-secrets.py";
-const RELEASES_BUCKET = "twingate-playground-argos-poc-releases";
+const RELEASES_BUCKET = BUCKETS.releases;
 const USAGE =
   "Usage: deploy.mjs install|update --image sha256:<image-id> --runtime-version <N> [--archive <protected-tar>] [--tls-version <N> (update only)]; deploy.mjs ci --image sha256:<image-id> --archive <protected-tar>";
 
@@ -74,13 +77,17 @@ async function verifyAdmission(deployment) {
     "id name users { edges { node { id } } pageInfo { hasNextPage } } resources { edges { node { id } } pageInfo { hasNextPage } }",
   );
   const group = groups.find(({ id }) => id === deployment.admin_group_id);
+  // An IdP-synced group's members belong to the IdP, so only a group Terraform
+  // manages must contain the operator.
+  const managed = deployment.entry_group_source === "terraform";
   if (
     !group ||
     group.name !== deployment.entry_group ||
-    group.users.pageInfo.hasNextPage ||
-    !group.users.edges.some(
-      ({ node }) => node.id === deployment.operator_subject,
-    ) ||
+    (managed &&
+      (group.users.pageInfo.hasNextPage ||
+        !group.users.edges.some(
+          ({ node }) => node.id === deployment.operator_subject,
+        ))) ||
     groups.some((item) => item.resources.pageInfo.hasNextPage)
   ) {
     throw new Error("Dedicated admission group drift");
@@ -147,7 +154,7 @@ async function verifyVm(outputs) {
     vm.networkInterfaces.some((item) => item.accessConfigs?.length) ||
     vm.labels?.deployment !== "argos-poc" ||
     vm.labels?.keep !== "true" ||
-    vm.labels?.owner !== "matt-demichele" ||
+    vm.labels?.owner !== OWNER_LABEL ||
     vm.serviceAccounts?.length !== 1 ||
     vm.serviceAccounts[0].email !== deployment.runtime_service_account
   ) {
@@ -380,7 +387,9 @@ async function releaseFiles(image, pins) {
     "release.env": envText(pins),
   };
   for (const name of RELEASE_FILES) {
-    files[name] = await readFile(join(ROOT, name), "utf8");
+    files[name] = (await readFile(join(ROOT, name), "utf8"))
+      .replaceAll("__TWINGATE_NETWORK__", ENVIRONMENT.twingate.network)
+      .replaceAll("__TWINGATE_HOST__", ENVIRONMENT.twingate.host);
   }
   return files;
 }

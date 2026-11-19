@@ -2,7 +2,6 @@ terraform {
   required_version = "= 1.12.1"
 
   backend "gcs" {
-    bucket = "twingate-playground-argos-poc-state"
     prefix = "terraform"
   }
 

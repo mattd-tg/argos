@@ -1,6 +1,6 @@
 twingate:
-  network: argospoc
-  host: us2.dev.opstg.com
+  network: __TWINGATE_NETWORK__
+  host: __TWINGATE_HOST__
 port: 8443
 metricsPort: 9090
 tls:

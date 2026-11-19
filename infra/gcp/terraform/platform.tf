@@ -11,7 +11,7 @@ resource "google_service_account" "storage" {
 }
 
 resource "google_storage_bucket" "screenshots" {
-  name                        = "twingate-playground-argos-poc-screenshots"
+  name                        = "${local.project}-argos-poc-screenshots"
   location                    = local.region
   uniform_bucket_level_access = true
   public_access_prevention    = "enforced"
@@ -65,7 +65,7 @@ resource "google_storage_bucket" "screenshots" {
 # Artifact Registry instead once the runtime account can be granted read
 # access there (see README, "Images and installation").
 resource "google_storage_bucket" "releases" {
-  name                        = "twingate-playground-argos-poc-releases"
+  name                        = "${local.project}-argos-poc-releases"
   location                    = local.region
   uniform_bucket_level_access = true
   public_access_prevention    = "enforced"

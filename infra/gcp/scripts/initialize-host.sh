@@ -97,6 +97,7 @@ fetch_metadata_file() {
 }
 
 install -d -o root -g root -m 0755 "$LIBRARY_DIRECTORY"
+fetch_metadata_file argos-poc-environment "$LIBRARY_DIRECTORY/environment.json" 0644
 fetch_metadata_file argos-poc-secret-loader "$LIBRARY_DIRECTORY/load-secrets.py" 0755
 fetch_metadata_file argos-poc-systemd-unit /etc/systemd/system/argos-poc.service 0644
 fetch_metadata_file argos-poc-prepare-unit /etc/systemd/system/argos-poc-prepare.service 0644

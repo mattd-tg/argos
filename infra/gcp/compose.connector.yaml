@@ -13,7 +13,7 @@ services:
     env_file:
       - /run/argos-poc/connector.env
     environment:
-      TWINGATE_URL: https://argospoc.us2.dev.opstg.com
+      TWINGATE_URL: https://__TWINGATE_NETWORK__.__TWINGATE_HOST__
       TWINGATE_DNS: 127.0.0.11
       TWINGATE_LOG_LEVEL: "3"
     networks:
