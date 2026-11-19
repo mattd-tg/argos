@@ -29,6 +29,7 @@ const TENANT_HOST = "gateway.example.test";
 const AUDIENCE = "argospoc";
 const RESOURCE_ADDRESS = "app.argos-poc.internal";
 const ENTRY_GROUP = "argos-poc-admins";
+const ADMIN_GROUP = "argos-poc-owners";
 
 const originalGatewayConfig = {
   enabled: config.get("twingate.gateway.enabled"),
@@ -37,6 +38,7 @@ const originalGatewayConfig = {
   jwksUrl: config.get("twingate.gateway.jwksUrl"),
   resourceAddress: config.get("twingate.gateway.resourceAddress"),
   entryGroup: config.get("twingate.gateway.entryGroup"),
+  adminGroup: config.get("twingate.gateway.adminGroup"),
 };
 
 let signingKey: CryptoKey;
@@ -64,6 +66,7 @@ function configureGateway(path: string) {
   config.set("twingate.gateway.jwksUrl", `https://${TENANT_HOST}/${path}`);
   config.set("twingate.gateway.resourceAddress", RESOURCE_ADDRESS);
   config.set("twingate.gateway.entryGroup", ENTRY_GROUP);
+  config.set("twingate.gateway.adminGroup", "");
 }
 
 function request(
@@ -177,6 +180,7 @@ afterAll(() => {
     jwksUrl,
     resourceAddress,
     entryGroup,
+    adminGroup,
   } = originalGatewayConfig;
   config.set("twingate.gateway.enabled", enabled);
   config.set("twingate.gateway.tenantHost", tenantHost);
@@ -184,6 +188,7 @@ afterAll(() => {
   config.set("twingate.gateway.jwksUrl", jwksUrl);
   config.set("twingate.gateway.resourceAddress", resourceAddress);
   config.set("twingate.gateway.entryGroup", entryGroup);
+  config.set("twingate.gateway.adminGroup", adminGroup);
 });
 
 describe("verifyGatewayRequest", () => {
@@ -204,8 +209,33 @@ describe("verifyGatewayRequest", () => {
       subject: "twingate-user-4703",
       email: "mattd@twingate.com",
       groups: [ENTRY_GROUP],
+      admin: false,
       expiresAt: expect.any(Number),
     });
+  });
+
+  test("admits the admin group without the entry group and flags its members", async () => {
+    configureGateway("admin-group");
+    const token = (groups: string[]) =>
+      signGatewayToken({
+        payload: {
+          resource: { type: "WEB_APP", address: RESOURCE_ADDRESS },
+          user: { id: "opaque-id", groups },
+        },
+      });
+    const adminOnly = await token(["Argos-Poc-Owners"]);
+
+    await expect(
+      verifyGatewayRequest(request(adminOnly)),
+    ).rejects.toMatchObject({ statusCode: 403 });
+
+    config.set("twingate.gateway.adminGroup", ADMIN_GROUP);
+    await expect(
+      verifyGatewayRequest(request(adminOnly)),
+    ).resolves.toMatchObject({ admin: true });
+    await expect(
+      verifyGatewayRequest(request(await token([ENTRY_GROUP]))),
+    ).resolves.toMatchObject({ admin: false });
   });
 
   test("allows optional email but never substitutes another identifier", async () => {

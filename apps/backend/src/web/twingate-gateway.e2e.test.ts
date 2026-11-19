@@ -67,6 +67,7 @@ const originalGatewayConfig = {
   jwksUrl: config.get("twingate.gateway.jwksUrl"),
   resourceAddress: config.get("twingate.gateway.resourceAddress"),
   entryGroup: config.get("twingate.gateway.entryGroup"),
+  adminGroup: config.get("twingate.gateway.adminGroup"),
   enrollmentEnabled: config.get("twingate.gateway.enrollment.enabled"),
   enrollmentTeamAccountId: config.get(
     "twingate.gateway.enrollment.teamAccountId",
@@ -80,6 +81,7 @@ const tenantHost = "gateway.test";
 const audience = "argos-poc";
 const resourceAddress = "app.argos-poc.internal";
 const entryGroup = "argos-poc-admins";
+const adminGroup = "argos-poc-owners";
 const jwksUrl = `https://${tenantHost}/api/v1/jwk/ec`;
 
 let privateKey: CryptoKey;
@@ -321,6 +323,7 @@ afterEach(() => {
   config.set("twingate.gateway.enrollment.enabled", false);
   config.set("twingate.gateway.enrollment.teamAccountId", "");
   config.set("twingate.gateway.enrollment.reviewerProjectIds", []);
+  config.set("twingate.gateway.adminGroup", "");
 });
 
 afterAll(async () => {
@@ -332,6 +335,7 @@ afterAll(async () => {
     jwksUrl: originalJwksUrl,
     resourceAddress: originalResourceAddress,
     entryGroup: originalEntryGroup,
+    adminGroup: originalAdminGroup,
     enrollmentEnabled,
     enrollmentTeamAccountId,
     enrollmentReviewerProjectIds,
@@ -342,6 +346,7 @@ afterAll(async () => {
   config.set("twingate.gateway.jwksUrl", originalJwksUrl);
   config.set("twingate.gateway.resourceAddress", originalResourceAddress);
   config.set("twingate.gateway.entryGroup", originalEntryGroup);
+  config.set("twingate.gateway.adminGroup", originalAdminGroup);
   config.set("twingate.gateway.enrollment.enabled", enrollmentEnabled);
   config.set(
     "twingate.gateway.enrollment.teamAccountId",
@@ -694,6 +699,45 @@ describe("Twingate Gateway browser authentication", () => {
     expect(ownerAccount.id).not.toBe(account.id);
 
     expect(viewer.user.id).not.toBe(user.id);
+  });
+
+  test("makes team ownership follow the admin group", async () => {
+    const { teamAccount, project } = await enableEnrollment();
+    const { teamId } = teamAccount;
+    config.set("twingate.gateway.adminGroup", adminGroup);
+    const subject = "admin-subject";
+    const level = async () => {
+      const { user } = await getGatewayMappedUser({
+        tenantHost,
+        twingateUserId: subject,
+      });
+      return (await TeamUser.query().findOne({ teamId, userId: user.id }))
+        ?.userLevel;
+    };
+
+    const admin = await signGatewayToken({ subject, groups: [adminGroup] });
+    await documentRequest("/", admin).expect(303);
+    expect(await level()).toBe("owner");
+
+    const reviewer = await signGatewayToken({ subject, groups: [entryGroup] });
+    await appRequest("/config.js").set(gatHeader(reviewer)).expect(401);
+    expect(await level()).toBe("contributor");
+    const { user } = await getGatewayMappedUser({
+      tenantHost,
+      twingateUserId: subject,
+    });
+    expect(
+      await ProjectUser.query()
+        .findOne({ projectId: project.id, userId: user.id })
+        .then((grant) => grant?.userLevel),
+    ).toBe("reviewer");
+
+    await appRequest("/config.js").set(gatHeader(admin)).expect(401);
+    expect(await level()).toBe("owner");
+
+    config.set("twingate.gateway.adminGroup", "");
+    await appRequest("/config.js").set(gatHeader(reviewer)).expect(401);
+    expect(await level()).toBe("owner");
   });
 
   test("lets enrolled visitors review projects created after they enrolled", async () => {

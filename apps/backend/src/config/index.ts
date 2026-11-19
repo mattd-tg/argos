@@ -211,6 +211,12 @@ export function createConfig() {
           default: "",
           env: "TWINGATE_GATEWAY_ENTRY_GROUP",
         },
+        adminGroup: {
+          doc: "Optional Twingate group whose members also enter through Gateway and own the enrollment team. With enrollment enabled, team ownership follows this group on every request: members are promoted to owner, and owners outside it drop to contributor.",
+          format: String,
+          default: "",
+          env: "TWINGATE_GATEWAY_ADMIN_GROUP",
+        },
         enrollment: {
           enabled: {
             doc: "Whether Gateway may enroll previously unmapped identities.",
@@ -900,6 +906,21 @@ export function createConfig() {
       throw new Error(
         "TWINGATE_GATEWAY_JWKS_URL must be an HTTPS URL for TWINGATE_TENANT_HOST without credentials, query, or fragment.",
       );
+    }
+
+    const adminGroup = config.get("twingate.gateway.adminGroup").trim();
+    if (adminGroup) {
+      const name = adminGroup.toLowerCase();
+      if (
+        placeholder.test(adminGroup) ||
+        name === "everyone" ||
+        name.startsWith("twingate:") ||
+        name === values.entryGroup.toLowerCase()
+      ) {
+        throw new Error(
+          "TWINGATE_GATEWAY_ADMIN_GROUP must name a dedicated group other than TWINGATE_GATEWAY_ENTRY_GROUP.",
+        );
+      }
     }
 
     if (config.get("twingate.gateway.enrollment.enabled")) {

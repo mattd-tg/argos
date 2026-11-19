@@ -17,6 +17,8 @@ export interface VerifiedGatewayIdentity {
   subject: string;
   email: string | null;
   groups: string[];
+  /** Whether the assertion names the configured admin group. */
+  admin: boolean;
   /** Unix epoch milliseconds, suitable for scheduling connection expiry. */
   expiresAt: number;
 }
@@ -38,6 +40,7 @@ interface GatewayConfig {
   jwksUrl: URL;
   resourceAddress: string;
   entryGroup: string;
+  adminGroup: string;
 }
 
 let remoteJwks: RemoteJWKSet | null = null;
@@ -63,6 +66,7 @@ function getGatewayConfig(): GatewayConfig {
     jwksUrl: new URL(config.get("twingate.gateway.jwksUrl").trim()),
     resourceAddress: config.get("twingate.gateway.resourceAddress").trim(),
     entryGroup: config.get("twingate.gateway.entryGroup").trim(),
+    adminGroup: config.get("twingate.gateway.adminGroup").trim(),
   };
 }
 
@@ -104,9 +108,13 @@ function getGatewayToken(
   return token;
 }
 
-function hasGatewayEntryGroup(groups: string[], entryGroup: string): boolean {
-  const expected = entryGroup.toLowerCase();
-  if (expected === "everyone" || expected.startsWith("twingate:")) {
+function hasGatewayGroup(groups: string[], group: string): boolean {
+  const expected = group.toLowerCase();
+  if (
+    !expected ||
+    expected === "everyone" ||
+    expected.startsWith("twingate:")
+  ) {
     return false;
   }
 
@@ -133,8 +141,14 @@ function isJwtValidationError(error: unknown): boolean {
 export async function verifyGatewayRequest(
   request: Pick<IncomingMessage, "headers" | "rawHeaders">,
 ): Promise<VerifiedGatewayIdentity> {
-  const { tenantHost, audience, jwksUrl, resourceAddress, entryGroup } =
-    getGatewayConfig();
+  const {
+    tenantHost,
+    audience,
+    jwksUrl,
+    resourceAddress,
+    entryGroup,
+    adminGroup,
+  } = getGatewayConfig();
   const token = getGatewayToken(request);
 
   // jose throws a plain TypeError, not a JOSEError, for a dot-shaped token
@@ -185,7 +199,8 @@ export async function verifyGatewayRequest(
     }
     const { id, email, groups } = user.data;
 
-    if (!hasGatewayEntryGroup(groups, entryGroup)) {
+    const admin = hasGatewayGroup(groups, adminGroup);
+    if (!admin && !hasGatewayGroup(groups, entryGroup)) {
       forbidden();
     }
 
@@ -194,6 +209,7 @@ export async function verifyGatewayRequest(
       subject: id,
       email: email ?? null,
       groups,
+      admin,
       expiresAt: exp * 1_000,
     };
   } catch (error) {

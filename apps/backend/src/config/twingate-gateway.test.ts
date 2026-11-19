@@ -14,6 +14,7 @@ const gatewayEnvironment = {
   TWINGATE_GATEWAY_ENROLLMENT_ENABLED: "true",
   TWINGATE_GATEWAY_ENROLLMENT_TEAM_ACCOUNT_ID: "3",
   TWINGATE_GATEWAY_ENROLLMENT_REVIEWER_PROJECT_IDS: "1,2",
+  TWINGATE_GATEWAY_ADMIN_GROUP: "",
 } satisfies Record<string, string>;
 
 function createGatewayConfig(
@@ -68,6 +69,25 @@ describe("Gateway enrollment configuration", () => {
           TWINGATE_GATEWAY_ENROLLMENT_REVIEWER_PROJECT_IDS: reviewerProjectIds,
         }),
       ).toThrow(/ENROLLMENT_REVIEWER_PROJECT_IDS/);
+    },
+  );
+});
+
+describe("Gateway admin group configuration", () => {
+  it("accepts a dedicated admin group", () => {
+    const config = createGatewayConfig({
+      TWINGATE_GATEWAY_ADMIN_GROUP: "argos-admins",
+    });
+
+    expect(config.get("twingate.gateway.adminGroup")).toBe("argos-admins");
+  });
+
+  it.each(["Argos-Users", "Everyone", "twingate:members", "changeme"])(
+    "rejects admin group %j",
+    (adminGroup) => {
+      expect(() =>
+        createGatewayConfig({ TWINGATE_GATEWAY_ADMIN_GROUP: adminGroup }),
+      ).toThrow(/TWINGATE_GATEWAY_ADMIN_GROUP/);
     },
   );
 });

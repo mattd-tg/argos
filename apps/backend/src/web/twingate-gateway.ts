@@ -9,12 +9,16 @@ import {
   setLoggedInCookie,
 } from "@/auth/session-cookie";
 import { sessionAuthFromExpressReq } from "@/auth/session-request";
-import { verifyGatewayRequest } from "@/auth/twingate-gateway";
+import {
+  verifyGatewayRequest,
+  type VerifiedGatewayIdentity,
+} from "@/auth/twingate-gateway";
 import config from "@/config";
 import {
   enrollGatewayIdentity,
   findGatewayMappedUser,
   getGatewayMappedUser,
+  syncGatewayTeamOwnership,
   type GatewayMappedUser,
 } from "@/database/services/twingate-gateway";
 import { boom, HTTPError } from "@/util/error";
@@ -183,6 +187,24 @@ function getSafeRequestRedirect(request: Request): string {
   return "/";
 }
 
+/** Admin-group ownership needs the enrollment team to apply to. */
+async function syncAdminOwnership(
+  identity: VerifiedGatewayIdentity,
+  mapping: GatewayMappedUser,
+): Promise<void> {
+  if (
+    !config.get("twingate.gateway.adminGroup").trim() ||
+    !config.get("twingate.gateway.enrollment.enabled")
+  ) {
+    return;
+  }
+  await syncGatewayTeamOwnership({
+    userId: mapping.user.id,
+    teamAccountId: config.get("twingate.gateway.enrollment.teamAccountId"),
+    owner: identity.admin,
+  });
+}
+
 async function bootstrapGatewaySession(
   request: Request,
   response: Response,
@@ -292,9 +314,12 @@ export function createTwingateGatewayMiddleware(): RequestHandler {
             ),
           },
         });
+        await syncAdminOwnership(identity, mapping);
         await bootstrapGatewaySession(request, response, mapping);
         return;
       }
+
+      await syncAdminOwnership(identity, mapping);
 
       try {
         await getMatchingGatewaySession(request, mapping);

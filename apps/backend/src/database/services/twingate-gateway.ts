@@ -211,6 +211,40 @@ export async function enrollGatewayIdentity(
   }
 }
 
+interface SyncGatewayTeamOwnershipProps {
+  userId: string;
+  teamAccountId: string;
+  owner: boolean;
+}
+
+/**
+ * Make team ownership follow the admin group: a member is promoted to owner,
+ * and an owner who left it drops to contributor. Other levels are left alone,
+ * so a demoted admin keeps the project grants enrollment gave them.
+ */
+export async function syncGatewayTeamOwnership(
+  props: SyncGatewayTeamOwnershipProps,
+): Promise<void> {
+  const { userId, teamAccountId, owner } = props;
+  const teamAccount = await Account.query().findById(teamAccountId);
+  if (!teamAccount || teamAccount.teamId === null) {
+    throw boom(503, "Service Unavailable");
+  }
+  const { teamId } = teamAccount;
+  const membership = await TeamUser.query().findOne({ teamId, userId });
+  const isOwner = membership?.userLevel === "owner";
+  if (owner && !isOwner) {
+    await TeamUser.query()
+      .insert({ teamId, userId, userLevel: "owner" })
+      .onConflict(["teamId", "userId"])
+      .merge(["userLevel"]);
+  } else if (!owner && isOwner) {
+    await TeamUser.query()
+      .patch({ userLevel: "contributor" })
+      .where({ teamId, userId, userLevel: "owner" });
+  }
+}
+
 interface ProvisionGatewayIdentityProps {
   tenantHost: string;
   twingateUserId: string;
